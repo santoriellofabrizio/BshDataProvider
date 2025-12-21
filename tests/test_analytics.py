@@ -8,13 +8,6 @@ import datetime as dt
 
 
 
-from analytics import AnalyticsLogger
-from analytics import ProviderAdapter
-from analytics import get_contiguous_date, generate_date_range
-from analytics import ReturnAdjuster
-from core.enums.instrument_types import InstrumentType
-from core.instruments import InstrumentFactory
-
 
 def test_analytics():
     print("=" * 60)

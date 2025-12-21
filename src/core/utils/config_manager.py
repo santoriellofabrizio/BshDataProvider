@@ -142,15 +142,16 @@ class ConfigManager:
         self._yaml = YAML(typ="safe")
         self._load_dotenv()
     
-    def _load_dotenv(self) -> None:
+    @staticmethod
+    def _load_dotenv() -> None:
         """Load .env file if it exists and python-dotenv is available."""
         try:
             from dotenv import load_dotenv
             # Try to load .env from common locations
             env_paths = [
-                Path(".env"),
-                Path("config/.env"),
-                Path.home() / ".bshdata" / ".env",
+                Path.cwd() / Path(".env"),
+                Path.cwd() / Path("config/.env"),
+                Path.cwd() / ".bshdata" / ".env",
             ]
             for env_path in env_paths:
                 if env_path.exists():

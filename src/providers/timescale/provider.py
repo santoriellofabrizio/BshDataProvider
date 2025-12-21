@@ -158,6 +158,8 @@ class TimescaleProvider(BaseProvider):
             grouped[(freq_type, inst_type, currency)].append(req)
 
         all_results = {}
+        failed_requests = []  # Track failed requests for proper error reporting
+        
         for (freq_type, inst_type, currency), batch in grouped.items():
             n = len(batch)
             logger.debug(f"[{freq_type.upper()}] {inst_type.name} ({currency}) — {n} instruments")
@@ -168,6 +170,29 @@ class TimescaleProvider(BaseProvider):
 
             except Exception as e:
                 logger.error(f"Error fetching {inst_type} {currency} ({freq_type}): {e}", exc_info=True)
+                # Track failed requests - they won't be in all_results, so _update_tracking will handle them
+                # However, _update_tracking only marks them as incomplete, not failed
+                # To properly mark as failed, we need to raise an exception, but that would mark ALL requests
+                # So we collect failed requests and raise if ALL batches failed (no partial success)
+                failed_requests.extend(batch)
+        
+        # If ALL requests failed (no partial results), raise exception so client marks them as failed
+        # If SOME requests succeeded, return partial results (failed ones will be marked incomplete by _update_tracking)
+        if failed_requests and not all_results:
+            # All requests failed - raise exception so client marks all as failed
+            total_failed = len(failed_requests)
+            error_msg = (
+                f"TimescaleProvider failed to fetch all {total_failed} request(s). "
+                f"No partial results available."
+            )
+            raise RuntimeError(error_msg)
+        elif failed_requests:
+            # Partial failure - log warning but return partial results
+            # Failed requests will be handled by _update_tracking (marked as incomplete/partial)
+            logger.warning(
+                f"TimescaleProvider: {len(failed_requests)} request(s) failed, "
+                f"but {len(all_results)} succeeded. Returning partial results."
+            )
 
         logger.info(f"✅ Completed Timescale fetch: {len(all_results)}/{len(requests)} instruments fetched")
         return all_results

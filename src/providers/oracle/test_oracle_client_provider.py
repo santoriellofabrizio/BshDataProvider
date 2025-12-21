@@ -78,7 +78,7 @@ def test_pcf_composition_oracle(api: BshData):
 
     print("\n========== TEST ORACLE PCF ==========")
     api.enable_cache()
-    pcf = api.info.get_pcf_composition(isins=["LU1681045370","LU2265794946"], reference_date="yesterday")
+    pcf = api.info.get_pcf_composition(isins=["LU1681045370","LU2265794946"])
     print(pcf.head(10).to_string(index=True))
 
     assert not pcf.empty
@@ -87,7 +87,7 @@ def test_stocks_info(api: BshData):
 
     print("\n========== TEST ORACLE PCF ==========")
     api.enable_cache()
-    pcf = api.info.get_stock_markets(ticker="UCG")
+    pcf = api.info.get_stock_markets(ticker="UCG", autocomplete=True)
     print(pcf.head(10).to_string(index=True))
     assert not pcf.empty
 

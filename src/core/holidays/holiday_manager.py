@@ -46,7 +46,7 @@ class HolidayManager:
         """
         Returns True if the date is a weekend or holiday for the given market.
         """
-        market_cfg = self.config["markets"].get(market)
+        market_cfg = self.config["markets"].get(market, {})
         default_cfg = self.config["default"]
 
         # Check weekend
@@ -55,7 +55,7 @@ class HolidayManager:
 
         # Check fixed holidays
         fixed_days = set(default_cfg.get("fixed"))
-        fixed_days.update(market_cfg.get("fixed"))
+        fixed_days.update(market_cfg.get("fixed", {}))
         if dt.strftime("%m-%d") in fixed_days:
             return True
 

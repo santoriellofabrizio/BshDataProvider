@@ -3,7 +3,8 @@ FX Spot exposure adjustment component for ETF and Stock.
 
 Adjusts for currency exposure mismatch between portfolio and trading currency.
 """
-from datetime import date
+from datetime import date, datetime
+from typing import Union, List
 import pandas as pd
 import logging
 
@@ -115,7 +116,7 @@ class FxSpotComponent(Component):
     def calculate_batch(
         self,
         instruments: dict[str, InstrumentProtocol],
-        dates: list[date],
+        dates: Union[List[date], List[datetime]],
         prices: pd.DataFrame,
         fx_prices: pd.DataFrame,
     ) -> pd.DataFrame:

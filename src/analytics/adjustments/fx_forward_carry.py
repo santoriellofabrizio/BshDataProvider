@@ -4,8 +4,8 @@ FX Forward component for currency hedging costs.
 Calculates carry cost from FX forwards using interest rate differentials
 derived from forward prices.
 """
-from datetime import date
-from typing import Literal
+from datetime import date, datetime
+from typing import Literal, Union, List
 import pandas as pd
 import logging
 
@@ -173,7 +173,7 @@ class FxForwardComponent(Component):
     def calculate_batch(
         self,
         instruments: dict[str, InstrumentProtocol],
-        dates: list[date],
+        dates: Union[List[date], List[datetime]],
         prices: pd.DataFrame,
         fx_prices: pd.DataFrame,  # ← FX SPOT prices from Adjuster
     ) -> pd.DataFrame:
@@ -182,7 +182,7 @@ class FxForwardComponent(Component):
 
         Args:
             instruments: Instrument objects
-            dates: Calculation dates
+            dates: Calculation dates or datetimes
             prices: Price data (not used)
             fx_prices: FX SPOT prices (passed from Adjuster for consistency)
 

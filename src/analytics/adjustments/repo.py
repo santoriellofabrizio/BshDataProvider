@@ -3,8 +3,8 @@ Repo component for futures financing benefit.
 
 Calculates benefit from avoided financing costs when holding futures.
 """
-from datetime import date
-from typing import Literal
+from datetime import date, datetime
+from typing import Literal, Union, List
 import pandas as pd
 import logging
 
@@ -129,7 +129,7 @@ class RepoComponent(Component):
     def calculate_batch(
             self,
             instruments: dict[str, InstrumentProtocol],
-            dates: list[date],
+            dates: Union[List[date], List[datetime]],
             prices: pd.DataFrame,
             fx_prices: pd.DataFrame,
     ) -> pd.DataFrame:

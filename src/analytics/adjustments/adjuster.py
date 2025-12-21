@@ -1,10 +1,11 @@
 """
 Adjuster orchestrator for return adjustments.
 """
-from datetime import date
+from datetime import date, datetime
 import pandas as pd
+import numpy as np
 import logging
-from typing import Dict, Optional
+from typing import Dict, Optional, Union, List
 
 from analytics.adjustments.component import Component
 from analytics.adjustments.protocols import InstrumentProtocol
@@ -41,6 +42,8 @@ class Adjuster:
         prices: pd.DataFrame,
         fx_prices: pd.DataFrame,
         instruments: Optional[Dict[str, InstrumentProtocol]] = None,
+        intraday: bool = False,
+        settlement_days: Union[int, pd.Series, Dict[str, int]] = 2,
     ):
         """
         Initialize adjuster.
@@ -51,16 +54,38 @@ class Adjuster:
                     - Columns: instrument IDs
             fx_prices: DataFrame with FX spot rates (EUR base)
                        - Index: dates (DatetimeIndex or convertible)
-                       - Columns: currency codes
+                       - Columns: currency codes or FX tickers (EURUSD, EURGBP, etc.)
             instruments: Optional dict[instrument_id → Instrument object]
                         If None, fetches from InstrumentFactory
+            intraday: If True, preserve intraday timestamps; if False, normalize to dates
+            settlement_days: Settlement lag for all instruments or per-instrument
+                           - int: Same for all (e.g., 2 for T+2)
+                           - pd.Series: Per-instrument (index=instrument_id, values=days)
+                           - Dict: Per-instrument mapping {instrument_id: days}
 
         Raises:
             ValueError: If DataFrames malformed or incompatible
         """
+        # Store intraday flag
+        self.intraday = intraday
+        
+        # Parse settlement_days
+        self.settlement_days = self._parse_settlement_days(
+            settlement_days, 
+            prices.columns.tolist()
+        )
+        
         # Validate and normalize DataFrames
         self.prices = self._validate_and_transpose(prices, "prices")
         self.fx_prices = self._validate_and_transpose(fx_prices, "fx_prices")
+        
+        # Normalize FX prices columns (EURUSD → USD)
+        self.fx_prices = self._normalize_fx_columns(self.fx_prices)
+        
+        # Normalize dates if not intraday
+        if not self.intraday:
+            self.prices.index = self.prices.index.normalize()
+            self.fx_prices.index = self.fx_prices.index.normalize()
 
         # Extract instrument IDs from columns
         self.instrument_ids = self.prices.columns.tolist()
@@ -76,11 +101,140 @@ class Adjuster:
 
         # Component registry
         self.components: list[Component] = []
+        
+        # Cache for static vs dynamic adjustments
+        self._static_components_cache: Optional[pd.DataFrame] = None
+        self._fx_dependent_components: list[Component] = []
 
         logger.info(
             f"Adjuster initialized: {len(self.instrument_ids)} instruments, "
-            f"{len(self.prices.index)} dates"
+            f"{len(self.prices.index)} {'timestamps' if self.intraday else 'dates'}"
         )
+    
+    def _parse_settlement_days(
+        self, 
+        settlement_days: Union[int, pd.Series, Dict[str, int]], 
+        instrument_ids: List[str]
+    ) -> pd.Series:
+        """
+        Parse settlement_days parameter into per-instrument Series.
+        
+        Args:
+            settlement_days: int, Series, or Dict
+            instrument_ids: List of instrument IDs
+        
+        Returns:
+            pd.Series with settlement days per instrument
+        """
+        # Case 1: int (same for all)
+        if isinstance(settlement_days, int):
+            if settlement_days < 0 or settlement_days > 5:
+                raise ValueError(f"settlement_days must be 0-5, got {settlement_days}")
+            return pd.Series(settlement_days, index=instrument_ids)
+        
+        # Case 2: Dict
+        if isinstance(settlement_days, dict):
+            settlement_days = pd.Series(settlement_days)
+        
+        # Case 3: Series
+        if isinstance(settlement_days, pd.Series):
+            # Validate values
+            if (settlement_days < 0).any() or (settlement_days > 5).any():
+                raise ValueError("settlement_days values must be 0-5")
+            
+            # Fill missing instruments with default (2)
+            settlement_series = pd.Series(2, index=instrument_ids)
+            settlement_series.update(settlement_days)
+            return settlement_series
+        
+        raise TypeError(
+            f"settlement_days must be int, pd.Series, or Dict, got {type(settlement_days)}"
+        )
+
+    def _normalize_fx_columns(self, fx_prices: pd.DataFrame) -> pd.DataFrame:
+        """
+        Normalize FX price columns from tickers to currency codes.
+        
+        Converts:
+            EURUSD → USD
+            EURGBP → GBP
+            EURJPY → JPY
+            USD    → USD (unchanged, warning)
+            USDEUR → USD (inverted, warning)
+        
+        Args:
+            fx_prices: DataFrame with FX prices
+        
+        Returns:
+            DataFrame with normalized column names and inverted prices where needed
+        """
+        normalized_columns = {}
+        columns_to_invert = []  # Track which columns need 1/price
+        
+        for col in fx_prices.columns:
+            col_str = str(col).upper()
+            
+            # Case 1: 6-char EUR-based ticker (EURUSD, EURGBP, etc.)
+            if len(col_str) == 6 and col_str.startswith('EUR'):
+                # Extract quote currency (last 3 chars)
+                currency = col_str[-3:]
+                normalized_columns[col] = currency
+                logger.debug(f"Normalized FX column: {col} → {currency}")
+            
+            # Case 2: 6-char inverted ticker (USDEUR, GBPEUR, etc.)
+            elif len(col_str) == 6 and col_str.endswith('EUR'):
+                # Extract base currency (first 3 chars)
+                currency = col_str[:3]
+                normalized_columns[col] = currency
+                columns_to_invert.append(col)
+                logger.warning(
+                    f"FX column '{col}' is inverted (base currency is not EUR). "
+                    f"Inverting prices: 1/{col} → {currency}"
+                )
+            
+            # Case 3: 3-char currency code (USD, GBP, etc.)
+            elif len(col_str) == 3:
+                normalized_columns[col] = col_str
+                logger.warning(
+                    f"FX column '{col}' is a currency code without EUR base indication. "
+                    f"Assuming it represents EUR{col} (e.g., EUR/{col} rate)."
+                )
+            
+            # Case 4: Other formats - warn and keep as-is
+            else:
+                logger.warning(
+                    f"FX column '{col}' doesn't match expected format (EURCCY, CCYEUR, or CCY). "
+                    "Keeping as-is."
+                )
+                normalized_columns[col] = col
+        
+        # Create normalized DataFrame
+        fx_normalized = fx_prices.copy()
+        
+        # Invert prices for inverted tickers (USDEUR → 1/USDEUR)
+        for col in columns_to_invert:
+            logger.info(f"Inverting FX prices for {col}: new values = 1 / old values")
+            fx_normalized[col] = 1.0 / fx_normalized[col]
+            # Replace inf with NaN (in case of zero prices)
+            fx_normalized[col].replace([np.inf, -np.inf], np.nan, inplace=True)
+        
+        # Rename columns
+        fx_normalized = fx_normalized.rename(columns=normalized_columns)
+        
+        # Log duplicates if any
+        duplicates = fx_normalized.columns[fx_normalized.columns.duplicated()].tolist()
+        if duplicates:
+            logger.warning(
+                f"Duplicate currency codes after normalization: {duplicates}. "
+                "Keeping first occurrence."
+            )
+            fx_normalized = fx_normalized.loc[:, ~fx_normalized.columns.duplicated()]
+        
+        logger.info(
+            f"FX columns normalized: {list(fx_prices.columns)} → {list(fx_normalized.columns)}"
+        )
+        
+        return fx_normalized
 
     def _validate_and_transpose(self, df: pd.DataFrame, name: str) -> pd.DataFrame:
         """
@@ -194,20 +348,41 @@ class Adjuster:
             adjuster.add(TerComponent(ters)).add(YtmComponent(ytms))
         """
         self.components.append(component)
+        
+        # Track FX-dependent components (invalidate cache on FX update)
+        from analytics.adjustments.fx_spot import FxSpotComponent
+        from analytics.adjustments.fx_forward_carry import FxForwardComponent
+        
+        if isinstance(component, (FxSpotComponent, FxForwardComponent)):
+            self._fx_dependent_components.append(component)
+        
         logger.debug(f"Added component: {component.__class__.__name__}")
         return self
 
-    def calculate(self, dates: list[date] | None = None) -> pd.DataFrame:
+    def calculate(self, dates: Union[list[date], list[datetime], None] = None) -> pd.DataFrame:
         """
         Calculate adjustments for all instruments.
 
         Args:
-            dates: Optional subset of dates (default: all dates in prices.index)
+            dates: Optional subset of dates/datetimes (default: all from prices.index)
+                  - If intraday=True: expects datetime objects
+                  - If intraday=False: expects date objects or will normalize datetimes
 
         Returns:
             DataFrame(dates × instruments) with total adjustments
         """
-        calc_dates = dates or self.prices.index.tolist()
+        # Get dates from index if not provided
+        if dates is None:
+            calc_dates = self.prices.index.tolist()
+        else:
+            calc_dates = dates
+            
+            # Normalize to dates if not intraday
+            if not self.intraday:
+                calc_dates = [
+                    d.date() if isinstance(d, (datetime, pd.Timestamp)) else d
+                    for d in calc_dates
+                ]
 
         # Initialize result
         adjustments = pd.DataFrame(0.0, index=calc_dates, columns=self.instrument_ids)
@@ -243,13 +418,136 @@ class Adjuster:
                 # Continue with other components
 
         return adjustments
+    
+    def get_adjustments_cumulative(self, dates: Union[list[date], list[datetime], None] = None) -> pd.DataFrame:
+        """
+        Get cumulative adjustments (sum from end to each date).
+        
+        Useful for applying adjustments to cumulative returns.
+        
+        Formula:
+            cumulative_adj[t] = sum(adjustments[t:end])
+        
+        Args:
+            dates: Optional subset of dates/datetimes
+        
+        Returns:
+            DataFrame(dates × instruments) with cumulative adjustments
+        
+        Example:
+            # Period adjustments
+            adjustments = adjuster.calculate()
+            # [0.001, 0.002, 0.001]
+            
+            # Cumulative adjustments
+            cumulative_adj = adjuster.get_adjustments_cumulative()
+            # [0.004, 0.003, 0.001]  (reverse cumsum)
+        """
+        # Get regular adjustments
+        adjustments = self.calculate(dates)
+        
+        # Reverse cumulative sum: [::-1].cumsum()[::-1]
+        cumulative = adjustments[::-1].cumsum()[::-1]
+        
+        return cumulative
+    
+    def update_fx_prices(self, new_fx_prices: Union[pd.Series, pd.DataFrame], timestamp: Optional[Union[date, datetime]] = None):
+        """
+        Update FX prices for live data (invalidates FX-dependent component cache).
+        
+        Use this when receiving live FX price updates to avoid recalculating
+        static adjustments (TER, YTM, dividends).
+        
+        Args:
+            new_fx_prices: Updated FX prices
+                          - pd.Series: {currency: price} (updates last row)
+                          - pd.DataFrame: Full update (replaces fx_prices)
+            timestamp: Optional timestamp to update (default: last row)
+        
+        Example:
+            # Initial setup
+            adj = Adjuster(prices, fx_prices, intraday=True)
+            adj.add(FxSpotComponent(fx_comp))  # FX-dependent
+            adj.add(TerComponent(ters))         # Static
+            
+            # First calculation (calculates everything)
+            adjustments_9am = adj.calculate()
+            
+            # --- Live FX update at 10:30 ---
+            new_fx = pd.Series({'USD': 1.12, 'GBP': 0.86})
+            adj.update_fx_prices(new_fx)
+            
+            # Recalculation (only FX components recalculated, TER cached)
+            adjustments_10_30 = adj.calculate()
+        """
+        if isinstance(new_fx_prices, pd.Series):
+            # Update last row (or specified timestamp)
+            if timestamp is None:
+                timestamp = self.fx_prices.index[-1]
+            
+            # Normalize FX columns if needed
+            normalized_fx = self._normalize_fx_series(new_fx_prices)
+            
+            # Update prices
+            for currency, price in normalized_fx.items():
+                if currency in self.fx_prices.columns:
+                    self.fx_prices.loc[timestamp, currency] = price
+                else:
+                    logger.warning(f"Currency '{currency}' not in fx_prices columns, skipping")
+        
+        elif isinstance(new_fx_prices, pd.DataFrame):
+            # Full replacement
+            self.fx_prices = self._normalize_fx_columns(new_fx_prices)
+        
+        else:
+            raise TypeError(f"new_fx_prices must be pd.Series or pd.DataFrame, got {type(new_fx_prices)}")
+        
+        # Invalidate cache for FX-dependent components
+        # (Static components like TER, YTM remain cached)
+        logger.debug(f"FX prices updated, invalidated {len(self._fx_dependent_components)} FX-dependent components")
+    
+    def _normalize_fx_series(self, fx_series: pd.Series) -> pd.Series:
+        """
+        Normalize FX series (similar to _normalize_fx_columns but for Series).
+        
+        Args:
+            fx_series: Series with currency codes or tickers as index
+        
+        Returns:
+            Normalized series with currency codes
+        """
+        normalized = {}
+        
+        for key, value in fx_series.items():
+            key_str = str(key).upper()
+            
+            # EURUSD → USD
+            if len(key_str) == 6 and key_str.startswith('EUR'):
+                currency = key_str[-3:]
+                normalized[currency] = value
+            
+            # USDEUR → USD (inverted)
+            elif len(key_str) == 6 and key_str.endswith('EUR'):
+                currency = key_str[:3]
+                normalized[currency] = 1.0 / value if value != 0 else np.nan
+            
+            # USD → USD
+            elif len(key_str) == 3:
+                normalized[key_str] = value
+            
+            else:
+                normalized[key] = value
+        
+        return pd.Series(normalized)
 
-    def get_breakdown(self, dates: list[date] | None = None) -> dict[str, pd.DataFrame]:
+    def get_breakdown(self, dates: Union[list[date], list[datetime], None] = None) -> dict[str, pd.DataFrame]:
         """
         Get adjustments broken down by component.
 
         Args:
-            dates: Optional subset of dates (default: all dates in prices.index)
+            dates: Optional subset of dates/datetimes (default: all from prices.index)
+                  - If intraday=True: expects datetime objects
+                  - If intraday=False: expects date objects or will normalize datetimes
 
         Returns:
             Dict[component_name → DataFrame(dates × instruments)]
@@ -259,7 +557,18 @@ class Adjuster:
             ter_adj = breakdown['TerComponent']
             ytm_adj = breakdown['YtmComponent']
         """
-        calc_dates = dates or self.prices.index.tolist()
+        # Get dates from index if not provided
+        if dates is None:
+            calc_dates = self.prices.index.tolist()
+        else:
+            calc_dates = dates
+            
+            # Normalize to dates if not intraday
+            if not self.intraday:
+                calc_dates = [
+                    d.date() if isinstance(d, (datetime, pd.Timestamp)) else d
+                    for d in calc_dates
+                ]
         breakdown = {}
 
         for component in self.components:
@@ -283,14 +592,16 @@ class Adjuster:
     def clean_returns(
         self,
         raw_returns: pd.DataFrame,
-        dates: list[date] | None = None,
+        dates: Union[list[date], list[datetime], None] = None,
     ) -> pd.DataFrame:
         """
         Clean raw returns by applying adjustments.
 
         Args:
             raw_returns: DataFrame(dates × instruments) with raw returns
-            dates: Optional subset of dates
+            dates: Optional subset of dates/datetimes
+                  - If intraday=True: expects datetime objects
+                  - If intraday=False: expects date objects or will normalize datetimes
 
         Returns:
             DataFrame(dates × instruments) with cleaned returns

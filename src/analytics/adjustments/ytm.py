@@ -3,7 +3,8 @@ YTM (Yield to Maturity) adjustment component for Fixed Income ETF.
 
 Calculates yield carry cost for bond ETFs.
 """
-from datetime import date
+from datetime import date, datetime
+from typing import Union, List
 import pandas as pd
 import logging
 
@@ -19,8 +20,8 @@ class YtmComponent(Component):
     """
     YTM (Yield to Maturity) adjustment component.
 
-    Calculates yield carry cost for Fixed Income ETFs using shifted year fractions
-    to account for T+2 settlement.
+    Calculates yield carry cost for Fixed Income instruments (ETF, Future, Index)
+    using shifted year fractions to account for settlement lag.
 
     Formula:
         adjustment = -ytm × year_fraction_shifted
@@ -28,11 +29,12 @@ class YtmComponent(Component):
     Usage:
         # API returns DataFrame (dates × instruments)
         ytm = pd.DataFrame({
-            'AGGH LN': [0.045, 0.046, 0.045],
-            'IEAG LN': [0.042, 0.043, 0.042],
+            'AGGH LN': [0.045, 0.046, 0.045],  # ETF
+            'FUTURE_ISIN': [0.042, 0.043],     # Future
+            'INDEX_ISIN': [0.038, 0.039],      # Index
         }, index=dates)
 
-        adjuster.add(YtmComponent(ytm))
+        adjuster.add(YtmComponent(ytm, settlement_days=2))
     """
 
     def __init__(self, ytm: pd.DataFrame, settlement_days: int = 2):
@@ -45,7 +47,7 @@ class YtmComponent(Component):
                  Columns: instrument IDs
                  Values: YTM in decimal (0.045 = 4.5%)
                  Sparse OK (NaN = 0)
-            settlement_days: Settlement lag (T+1=1, T+2=2)
+            settlement_days: Settlement lag (T+1=1, T+2=2, T+3=3)
         """
         self.ytm_series = ytm.fillna(0.0)
         self.settlement_days = settlement_days
@@ -60,32 +62,57 @@ class YtmComponent(Component):
         Check if YTM applicable.
 
         Applicable if:
-        - ETP
-        - underlying_type is FIXED INCOME or MONEY MARKET
+        - ETP with FIXED INCOME or MONEY MARKET underlying
+        - FUTURE with FIXED INCOME underlying
+        - INDEX with FIXED INCOME type
         - Has YTM data
         """
-        if instrument.type != InstrumentType.ETP:
-            return False
-
         if instrument.id not in self.ytm_series.columns:
             return False
 
-        # Check underlying type if available
-        if isinstance(instrument, EtfInstrumentProtocol):
-            underlying = instrument.underlying_type
+        # ETP (ETF): Check underlying_type
+        if instrument.type == InstrumentType.ETP:
+            if isinstance(instrument, EtfInstrumentProtocol):
+                underlying = instrument.underlying_type
+                if underlying and underlying not in ['FIXED INCOME', 'MONEY MARKET']:
+                    logger.debug(
+                        f"{instrument.id} is {underlying}, not Fixed Income, skipping YTM"
+                    )
+                    return False
+            return True
 
-            if underlying and underlying not in ['FIXED INCOME', 'MONEY MARKET']:
+        # FUTURE: Check underlying_type attribute
+        if instrument.type == InstrumentType.FUTURE:
+            if hasattr(instrument, 'underlying_type'):
+                underlying = instrument.underlying_type
+                if underlying and underlying == 'FIXED INCOME':
+                    return True
                 logger.debug(
-                    f"{instrument.id} is {underlying}, not Fixed Income, skipping YTM"
+                    f"{instrument.id} is {underlying}, not Fixed Income Future, skipping YTM"
                 )
                 return False
+            # If no underlying_type, check if has YTM data (assume applicable)
+            return True
 
-        return True
+        # INDEX: Check index_type attribute
+        if instrument.type == InstrumentType.INDEX:
+            if hasattr(instrument, 'index_type'):
+                index_type = instrument.index_type
+                if index_type and index_type == 'FIXED INCOME':
+                    return True
+                logger.debug(
+                    f"{instrument.id} is {index_type}, not Fixed Income Index, skipping YTM"
+                )
+                return False
+            # If no index_type, check if has YTM data (assume applicable)
+            return True
+
+        return False
 
     def calculate_batch(
             self,
             instruments: dict[str, InstrumentProtocol],
-            dates: list[date],
+            dates: Union[List[date], List[datetime]],
             prices: pd.DataFrame,
             fx_prices: pd.DataFrame,
     ) -> pd.DataFrame:

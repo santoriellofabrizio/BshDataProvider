@@ -11,25 +11,21 @@ from core.utils.config_manager import ConfigManager
 from core.utils.singleton import Singleton
 
 from providers.bloomberg.bloomberg import BloombergProvider
-from providers.mock import MockProvider
 from providers.oracle.provider import OracleProvider
 from providers.timescale.provider import TimescaleProvider
-
 
 
 class BSHDataClient(Singleton):
     """Client unificato per recupero dati da multiple sorgenti."""
 
-    def __init__(self, config_manager: Optional[ConfigManager] = None, config_path=None, show_progress=True):
+    def __init__(self, config_manager: Optional[ConfigManager] = None, config_path=None):
         """
         Initialize BSHDataClient.
         
         Args:
             config_manager: ConfigManager instance (preferred, uses cached config)
             config_path: Path to config file (backward compatibility, creates ConfigManager)
-            show_progress: Whether to show progress for operations
         """
-        self.show_progress = show_progress
         
         # Support both ConfigManager (new) and config_path (backward compatibility)
         if config_manager is None:
@@ -53,10 +49,6 @@ class BSHDataClient(Singleton):
             DataSource.ORACLE.value: (
                 "oracle",
                 lambda: OracleProvider(config_manager=config_manager)
-            ),
-            DataSource.MOCK.value: (
-                "mock",
-                lambda: MockProvider()
             ),
         }
 

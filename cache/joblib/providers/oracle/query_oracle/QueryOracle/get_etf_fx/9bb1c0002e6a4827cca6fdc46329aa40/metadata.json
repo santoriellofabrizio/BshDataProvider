@@ -1,1 +1,1 @@
-{"duration": 0.4743180274963379, "input_args": {"isin_list": "['IE00B5BMR087', 'IE00B3ZW0K18']", "day": "datetime.date(2025, 12, 21)", "currency": "None", "**": "{'fx_fxfwrd': 'fxfwrd'}"}, "time": 1766309492.2611158}
+{"duration": 0.12291836738586426, "input_args": {"isin_list": "['IE00B5BMR087', 'IE00B3ZW0K18']", "day": "datetime.date(2025, 12, 21)", "currency": "None", "**": "{'fx_fxfwrd': 'fxfwrd'}"}, "time": 1766351942.619193}

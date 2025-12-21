@@ -2,9 +2,10 @@
 Base component for adjustments.
 """
 from abc import ABC, abstractmethod
-from datetime import date
+from datetime import date, datetime
 import pandas as pd
 import logging
+from typing import Union, List
 
 from analytics.adjustments.protocols import InstrumentProtocol
 
@@ -52,7 +53,7 @@ class Component(ABC):
     def calculate_batch(
         self,
         instruments: dict[str, InstrumentProtocol],
-        dates: list[date],
+        dates: Union[List[date], List[datetime]],
         prices: pd.DataFrame,
         fx_prices: pd.DataFrame,
     ) -> pd.DataFrame:
@@ -61,7 +62,7 @@ class Component(ABC):
 
         Args:
             instruments: Dict mapping instrument_id → Instrument object
-            dates: List of dates
+            dates: List of dates or datetimes (depending on Adjuster.intraday setting)
             prices: DataFrame(dates × instruments) - instrument prices
             fx_prices: DataFrame(dates × currencies) - FX rates (EUR base)
 
@@ -73,13 +74,15 @@ class Component(ABC):
             - Filter by is_applicable(instrument) internally
             - Return 0.0 for non-applicable instruments
             - Handle missing data gracefully (log warning, return 0.0)
+            - When intraday=True, dates will be datetime objects
+            - When intraday=False, dates will be date objects
         """
         pass
 
     def _safe_calculate(
         self,
         instrument: InstrumentProtocol,
-        dates: list[date],
+        dates: Union[List[date], List[datetime]],
         calculation_func,
     ) -> pd.Series:
         """
@@ -87,7 +90,7 @@ class Component(ABC):
 
         Args:
             instrument: Instrument being calculated
-            dates: Dates for calculation
+            dates: Dates or datetimes for calculation
             calculation_func: Function that returns Series
 
         Returns:
