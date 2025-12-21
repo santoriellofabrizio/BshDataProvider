@@ -1,5 +1,5 @@
 import logging
-from typing import Union, List, Dict, Any
+from typing import Union, List, Dict, Any, Optional
 from collections import defaultdict
 
 from core.base_classes.base_provider import BaseProvider
@@ -7,6 +7,7 @@ from core.enums.datasources import DataSource
 from core.requests.requests import BaseRequest, BaseMarketRequest, BaseStaticRequest
 from core.response_tracking.request_tracker import RequestTracker
 from core.utils.common import load_yaml
+from core.utils.config_manager import ConfigManager
 from core.utils.singleton import Singleton
 
 from providers.bloomberg.bloomberg import BloombergProvider
@@ -19,14 +20,31 @@ from providers.timescale.provider import TimescaleProvider
 class BSHDataClient(Singleton):
     """Client unificato per recupero dati da multiple sorgenti."""
 
-    def __init__(self, config_path=None, show_progress=True):
+    def __init__(self, config_manager: Optional[ConfigManager] = None, config_path=None, show_progress=True):
+        """
+        Initialize BSHDataClient.
+        
+        Args:
+            config_manager: ConfigManager instance (preferred, uses cached config)
+            config_path: Path to config file (backward compatibility, creates ConfigManager)
+            show_progress: Whether to show progress for operations
+        """
         self.show_progress = show_progress
-        cfg = (load_yaml(config_path) or {}).get("client", {})
+        
+        # Support both ConfigManager (new) and config_path (backward compatibility)
+        if config_manager is None:
+            # Backward compatibility: create ConfigManager from path
+            config_manager = ConfigManager.load(config_path)
+        
+        self._config_manager = config_manager
+        
+        # Get client config
+        client_config = config_manager.get_client_config()
 
         provider_specs = {
             DataSource.TIMESCALE.value: (
                 "timescale",
-                lambda: TimescaleProvider(config_path=config_path)
+                lambda: TimescaleProvider(config_manager=config_manager)
             ),
             DataSource.BLOOMBERG.value: (
                 "bloomberg",
@@ -34,7 +52,7 @@ class BSHDataClient(Singleton):
             ),
             DataSource.ORACLE.value: (
                 "oracle",
-                lambda: OracleProvider(config_path=config_path)
+                lambda: OracleProvider(config_manager=config_manager)
             ),
             DataSource.MOCK.value: (
                 "mock",
@@ -43,7 +61,7 @@ class BSHDataClient(Singleton):
         }
 
         self.providers = {
-            name: self._init_lazy_provider(key, factory, cfg)
+            name: self._init_lazy_provider(key, factory, client_config)
             for name, (key, factory) in provider_specs.items()
         }
         self._tracker = RequestTracker()
@@ -56,10 +74,18 @@ class BSHDataClient(Singleton):
     #     return LazyProviderProxy(factory)
 
     @staticmethod
-    def _init_lazy_provider(key: str, factory, cfg: dict):
+    def _init_lazy_provider(key: str, factory, client_config):
         """Inizializzazione lazy: torna None se disattivato."""
-        if not cfg.get(f"activate_{key}", True):
-            return None
+        # Support both dict (backward compat) and ClientConfig object
+        if isinstance(client_config, dict):
+            activate_key = f"activate_{key}"
+            if not client_config.get(activate_key, True):
+                return None
+        else:
+            # ClientConfig dataclass
+            activate_key = f"activate_{key}"
+            if not getattr(client_config, activate_key, True):
+                return None
         return factory()
 
 

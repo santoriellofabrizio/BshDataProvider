@@ -3,6 +3,7 @@ import os
 import sys
 from client import BSHDataClient
 from core.utils.common import load_yaml
+from core.utils.config_manager import ConfigManager
 from core.utils.memory_provider import enable_cache, set_cache_dir, disable_cache
 from interface.api.general_data_api import GeneralDataAPI
 from interface.api.info_data_api import InfoDataAPI
@@ -54,18 +55,32 @@ class BshData:
                  warmup=None,
                  **kwargs) -> None:
 
-        cfg = (load_yaml(config_path) or {}).get("api", {})
-        log_level = log_level or cfg.get("log_level")
-        log_file = log_file or cfg.get("log_file")
-        log_level_file = log_level_file or cfg.get("log_level_file")
-        autocomplete = autocomplete or cfg.get("autocomplete")
-        warmup = warmup or cfg.get("warmup")
-        cache = cache or cfg.get("cache")
-        cache_path = cfg.get("cache_path")
+        # Load config using ConfigManager (cached, validated)
+        self._config_manager = ConfigManager.load(config_path)
+        
+        # Get API config with constructor overrides
+        api_config = self._config_manager.get_api_config(
+            log_level=log_level,
+            log_file=log_file,
+            log_level_file=log_level_file,
+            autocomplete=autocomplete,
+            warmup=warmup,
+            cache=cache
+        )
+        
+        # Use config values (constructor args take precedence via get_api_config)
+        # Note: get_api_config() already applies constructor overrides, so we use those values
+        log_level = api_config.log_level or "INFO"
+        log_file = api_config.log_file
+        log_level_file = api_config.log_level_file or api_config.log_level or "INFO"
+        autocomplete = api_config.autocomplete
+        warmup = api_config.warmup
+        cache = api_config.cache
+        cache_path = api_config.cache_path
 
         self._setup_logging(log_level, log_file=log_file, log_level_file=log_level_file)
         self._setup_cache(cache, cache_path)
-        self._setup_client(config_path, autocomplete, warmup, **kwargs)
+        self._setup_client(self._config_manager, autocomplete, warmup, **kwargs)
 
     # ============================================================
     # CACHE
@@ -91,9 +106,9 @@ class BshData:
     # ============================================================
     # CLIENT E API
     # ============================================================
-    def _setup_client(self, config_path: str | None, autocomplete, warmup, **kwargs) -> None:
+    def _setup_client(self, config_manager: ConfigManager, autocomplete, warmup, **kwargs) -> None:
         """Crea il client dati e inizializza le API."""
-        self.client = BSHDataClient(config_path=config_path)
+        self.client = BSHDataClient(config_manager=config_manager)
         self.market = MarketDataAPI(self.client, autocomplete=autocomplete)
         self.info = InfoDataAPI(self.client, autocomplete=autocomplete)
         self.general = GeneralDataAPI(self.client, autocomplete=autocomplete)

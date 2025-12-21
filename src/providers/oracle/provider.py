@@ -27,6 +27,7 @@ from core.base_classes.base_provider import BaseProvider
 
 from core.requests.requests import BaseStaticRequest, BaseMarketRequest
 from core.utils.common import load_yaml
+from core.utils.config_manager import ConfigManager
 from providers.oracle.fetchers.oracle_info_fetcher import OracleInfoFetcher
 from providers.oracle.query_oracle import QueryOracle
 from sfm_dbconnections.DbConnectionParameters import DbConnectionParameters, OracleConnectionParameters
@@ -55,9 +56,8 @@ class OracleProvider(BaseProvider):
         - Expose diagnostic helpers (raw SQL execution and health check)
 
     Args:
-        config_path (str | None): Optional path to a YAML configuration file
-            containing Oracle connection details. If omitted, credentials are
-            resolved from environment variables or singleton parameters.
+        config_manager: ConfigManager instance (preferred, uses cached config)
+        config_path: Path to config file (backward compatibility)
 
     Example:
         >>> oracle = OracleProvider(config_path="config/db.yaml")
@@ -69,20 +69,51 @@ class OracleProvider(BaseProvider):
     # ===========================================================
     # INIT / CONFIGURAZIONE
     # ===========================================================
-    def __init__(self, config_path: Optional[str] = "bshdata_config.yaml"):
+    def __init__(self, config_manager: Optional[ConfigManager] = None, config_path: Optional[str] = "bshdata_config.yaml"):
         self.connection: OracleConnection | None = None
         try:
-            cfg = self._load_config(config_path)
+            # Support both ConfigManager (new) and config_path (backward compatibility)
+            if config_manager is None:
+                # Backward compatibility: try singleton first, then YAML
+                try:
+                    cfg_dict = self._load_from_env_singleton()
+                    oracle_config = None  # Use dict directly
+                except Exception:
+                    logger.debug("Oracle singleton not instantiated, falling back to YAML/env config.")
+                    config_manager = ConfigManager.load(config_path)
+                    oracle_config = config_manager.get_oracle_config()
+            else:
+                # Use ConfigManager
+                oracle_config = config_manager.get_oracle_config()
+
+            # Convert to dict for OracleConnection
+            if oracle_config:
+                cfg_dict = {
+                    "user": oracle_config.user,
+                    "password": oracle_config.password,
+                    "tns_name": oracle_config.tns_name,
+                    "schema": oracle_config.schema,
+                    "secret_key": oracle_config.secret_key,
+                    "is_encrypted": oracle_config.is_encrypted,
+                    "config_dir": oracle_config.config_dir,
+                }
+            # else: cfg_dict already set from singleton
+
+            # Validate required fields
+            required = ["user", "password", "tns_name"]
+            missing = [k for k in required if not cfg_dict.get(k)]
+            if missing:
+                raise ValueError(f"Missing required Oracle config fields: {missing}")
 
             # Connessione Oracle
             self.connection = OracleConnection(
-                user=cfg["user"],
-                password=cfg["password"],
-                tns_name=cfg["tns_name"],
-                schema=cfg.get("schema"),
-                secret_key=cfg.get("secret_key", "AreaFinanza"),
-                is_encrypted=cfg.get("is_encrypted", True),
-                config_dir=cfg.get("config_dir"),
+                user=cfg_dict["user"],
+                password=cfg_dict["password"],
+                tns_name=cfg_dict["tns_name"],
+                schema=cfg_dict.get("schema"),
+                secret_key=cfg_dict.get("secret_key", "AreaFinanza"),
+                is_encrypted=cfg_dict.get("is_encrypted", True),
+                config_dir=cfg_dict.get("config_dir"),
             )
             self.connection.connect()
             logger.info("✅ OracleConnection established successfully")
@@ -96,15 +127,8 @@ class OracleProvider(BaseProvider):
             raise
 
     # ===========================================================
-    # CONFIG LOADER
+    # CONFIG LOADER (Backward compatibility)
     # ===========================================================
-    def _load_config(self, config_path: Optional[str]) -> dict:
-        try:
-            return self._load_from_env_singleton()
-        except Exception:
-            logger.debug("Oracle singleton not instantiated, falling back to YAML/env config.")
-
-        return load_yaml(config_path).get("oracle_connection", {})
 
 
 

@@ -24,6 +24,7 @@ from typing import List, Union, Dict, Tuple, Optional
 
 from core.enums.datasources import DataSource
 from core.utils.common import load_yaml
+from core.utils.config_manager import ConfigManager
 from providers.timescale.fetchers.timescale_info_fetcher import TimescaleInfoFetcher
 from providers.timescale.fetchers.timescale_market_fetcher import TimescaleMarketFetcher
 from providers.timescale.query_timescale import QueryTimeScale
@@ -53,9 +54,8 @@ class TimescaleProvider(BaseProvider):
         - Handle both daily (EOD) and intraday series retrieval
 
     Args:
-        config_path (str | None): Optional path to a YAML configuration file.
-            If omitted, connection parameters are loaded from environment
-            or singleton connection managers.
+        config_manager: ConfigManager instance (preferred, uses cached config)
+        config_path: Path to config file (backward compatibility)
 
     Example:
         >>> provider = TimescaleProvider(config_path="config/db.yaml")
@@ -64,21 +64,44 @@ class TimescaleProvider(BaseProvider):
         >>> print(data[my_etf.id].head())
     """
 
-    def __init__(self, config_path: Optional[str] = None):
+    def __init__(self, config_manager: Optional[ConfigManager] = None, config_path: Optional[str] = None):
         try:
             # ===========================================================
             # 1️⃣ Caricamento configurazione
             # ===========================================================
-            cfg = self._load_config(config_path)
+            # Support both ConfigManager (new) and config_path (backward compatibility)
+            if config_manager is None:
+                # Backward compatibility: try singleton first, then YAML
+                try:
+                    cfg_dict = self._load_from_env_singleton()
+                    timescale_config = None  # Use dict directly
+                except Exception:
+                    logger.debug("DB singleton not instantiated, falling back to YAML/env config.")
+                    config_manager = ConfigManager.load(config_path)
+                    timescale_config = config_manager.get_timescale_config()
+            else:
+                # Use ConfigManager
+                timescale_config = config_manager.get_timescale_config()
 
-            if not cfg:
+            # Convert to dict for QueryTimeScale
+            if timescale_config:
+                cfg_dict = {
+                    "host": timescale_config.host,
+                    "port": timescale_config.port,
+                    "db_name": timescale_config.db_name,
+                    "user": timescale_config.user,
+                    "password": timescale_config.password,
+                }
+            # else: cfg_dict already set from singleton
+
+            if not cfg_dict or not any(cfg_dict.values()):
                 logger.warning("TimescaleProvider failed to load config")
                 return
 
             # ===========================================================
             # 2️⃣ Inizializzazione connessione Timescale
             # ===========================================================
-            self.query_ts = QueryTimeScale(**cfg)
+            self.query_ts = QueryTimeScale(**cfg_dict)
             self.source = DataSource.TIMESCALE
             self.market_fetcher = TimescaleMarketFetcher(self.query_ts)
             self.info_fetcher = TimescaleInfoFetcher(self.query_ts)
@@ -89,16 +112,8 @@ class TimescaleProvider(BaseProvider):
 
 
     # ===========================================================
-    # CONFIGURAZIONE
+    # CONFIGURAZIONE (Backward compatibility)
     # ===========================================================
-    def _load_config(self, config_path: Optional[str]) -> dict:
-        try:
-            return self._load_from_env_singleton()
-        except Exception:
-            logger.debug("DB singleton not instantiated, falling back to YAML/env config.")
-            return load_yaml(config_path).get("timescale_connection", {})
-        finally:
-            return
 
     @staticmethod
     def _load_from_env_singleton() -> dict:
