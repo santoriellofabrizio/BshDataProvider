@@ -18,6 +18,27 @@ from core.enums.instrument_types import InstrumentType
 logger = logging.getLogger(__name__)
 
 
+# Tenor annualization factors
+TENOR_FACTORS = {
+    '1W': 52,
+    '2W': 26,
+    '1M': 12,
+    '2M': 6,
+    '3M': 4,
+    '6M': 2,
+    '9M': 4/3,
+    '12M': 1,
+}
+
+# Unit conversion divisors
+UNIT_DIVISORS = {
+    'bp': 10000,      # basis points
+    'pct': 100,       # percentage
+    'decimal': 1,     # already decimal
+    'pips': 10000,    # pips
+}
+
+
 def to_str(obj) -> str:
     """Convert CurrencyEnum or str to uppercase string."""
     return str(getattr(obj, 'value', obj)).upper()
@@ -31,8 +52,8 @@ class FxForwardComponent(Component):
     derived from FX forward prices.
 
     Formula:
-        1. Annualize 1M forwards: fwd_ann = fwd_1m × 12
-        2. Convert to decimal: fwd_diff = fwd_ann / 10000  (bps → decimal)
+        1. Annualize based on tenor: fwd_ann = fwd × tenor_factor
+        2. Convert to decimal: fwd_diff = fwd_ann / unit_divisor
         3. Get rate differential: rate_diff = fwd_diff / spot
            This gives: r_EUR - r_ccy
         4. Apply weights: cost = Σ(rate_diff[ccy] × weight[ccy]) × year_fraction
@@ -44,31 +65,34 @@ class FxForwardComponent(Component):
         Therefore: Price / Spot ≈ r_EUR - r_ccy
 
     Usage:
-        # FX Forward 1M prices in basis points
+        # FX Forward 1M prices in basis points (DEFAULT)
         fx_fwd_prices = pd.DataFrame({
             'USD': [15.0, 16.0, 14.5],  # EUR rates 15bps higher → pay premium
             'GBP': [-5.0, -4.5, -5.2],  # EUR rates 5bps lower → receive discount
         }, index=dates)
 
-        # Hedged composition
-        fxfwd_composition = pd.DataFrame({
-            'USD': [0.65],
-            'GBP': [0.10],
-        }, index=['IUSE.MI'])
+        component = FxForwardComponent(
+            fxfwd_composition,
+            fx_fwd_prices,
+            tenor="1M",    # Default
+            unit="bp"      # Default
+        )
 
-        # FX spot prices (passed from Adjuster in calculate_batch)
-        fx_spot_prices = pd.DataFrame({
-            'USD': [1.10, 1.11, 1.10],
-            'GBP': [0.85, 0.84, 0.85],
-        }, index=dates)
-
-        adjuster.add(FxForwardComponent(fxfwd_composition, fx_fwd_prices))
+        # For 3M forwards
+        component_3m = FxForwardComponent(
+            fxfwd_composition,
+            fx_fwd_3m_prices,
+            tenor="3M",
+            unit="bp"
+        )
     """
 
     def __init__(
         self,
         fxfwd_composition: pd.DataFrame,
         fx_fwd_prices: pd.DataFrame,
+        tenor: str = "1M",
+        unit: str = "bp",
         shifted_settlement: Literal["T+1", "T+2", "T+3"] = "T+2",
     ):
         """
@@ -78,9 +102,14 @@ class FxForwardComponent(Component):
             fxfwd_composition: DataFrame(instruments × currencies)
                               Hedged currency weights (0.65 = 65% hedged)
             fx_fwd_prices: DataFrame(dates × currencies)
-                          FX Forward 1M prices in basis points
+                          FX Forward prices in specified unit
                           Positive = EUR rates higher (pay premium)
                           Negative = EUR rates lower (receive discount)
+            tenor: Forward tenor (e.g., "1M", "3M", "6M", "12M")
+                  Default: "1M"
+            unit: Price unit - "bp" (basis points), "pct" (percentage),
+                  "decimal", or "pips"
+                  Default: "bp" (most common market convention)
             shifted_settlement: Settlement convention (T+1, T+2, T+3)
 
         Note:
@@ -91,9 +120,23 @@ class FxForwardComponent(Component):
         self.fx_fwd_prices = fx_fwd_prices.fillna(0.0).copy()
         self.settlement_days = int(shifted_settlement.replace("T+", ""))
 
+        # Tenor and unit configuration
+        self.tenor = tenor.upper()
+        self.unit = unit.lower()
+
+        if self.tenor not in TENOR_FACTORS:
+            raise ValueError(f"Unknown tenor: {tenor}. Supported: {list(TENOR_FACTORS.keys())}")
+        if self.unit not in UNIT_DIVISORS:
+            raise ValueError(f"Unknown unit: {unit}. Supported: {list(UNIT_DIVISORS.keys())}")
+
+        self.tenor_factor = TENOR_FACTORS[self.tenor]
+        self.unit_divisor = UNIT_DIVISORS[self.unit]
+
         logger.info(
             f"FxForwardComponent: {len(self.fxfwd_composition)} instruments, "
             f"{len(self.fxfwd_composition.columns)} currencies, "
+            f"tenor={self.tenor} (×{self.tenor_factor}), "
+            f"unit={self.unit} (÷{self.unit_divisor}), "
             f"settlement={shifted_settlement}"
         )
 
@@ -161,10 +204,9 @@ class FxForwardComponent(Component):
         logger.debug(f"FxForwardComponent: {len(applicable_ids)}/{len(instruments)} instruments")
 
         # Calculate rate differentials from forward prices
-        # This is the key step: converts forward prices to rate differentials
         rate_diffs = self._calculate_rate_differentials(
             self.fx_fwd_prices,
-            fx_prices  # ← Spot prices from Adjuster (recycled)
+            fx_prices
         )
 
         # Calculate year fractions with settlement shift
@@ -197,25 +239,25 @@ class FxForwardComponent(Component):
         """
         Calculate interest rate differentials from forward prices.
 
-        Formula (loro implementazione):
-            1. fwd_ann = fwd_1m × 12  (annualize 1M forwards)
-            2. fwd_diff = fwd_ann / 10000  (convert bps to decimal)
-            3. rate_diff = fwd_diff / spot  (normalize by spot)
+        Formula:
+            1. fwd_ann = fwd × tenor_factor (e.g., 1M: ×12, 3M: ×4)
+            2. fwd_diff = fwd_ann / unit_divisor (e.g., bp: ÷10000, pct: ÷100)
+            3. rate_diff = fwd_diff / spot
 
         This gives: rate_diff ≈ r_EUR - r_ccy
 
         Args:
-            fx_fwd_prices: Forward 1M prices in bps
+            fx_fwd_prices: Forward prices in specified unit and tenor
             fx_spot_prices: Spot FX rates
 
         Returns:
             DataFrame(dates × currencies) with rate differentials
         """
-        # Step 1: Annualize (1M → 12M)
-        fx_fwd_annualized = fx_fwd_prices * 12
+        # Step 1: Annualize based on tenor
+        fx_fwd_annualized = fx_fwd_prices * self.tenor_factor
 
-        # Step 2: Convert basis points to decimal
-        fx_fwd_diff = fx_fwd_annualized / 1e4  # 10000 bps = 1 = 100%
+        # Step 2: Convert to decimal based on unit
+        fx_fwd_diff = fx_fwd_annualized / self.unit_divisor
 
         # Step 3: Normalize by spot to get rate differential
         # Align dates and currencies
@@ -231,12 +273,12 @@ class FxForwardComponent(Component):
             return pd.DataFrame(0.0, index=fx_fwd_diff.index, columns=fx_fwd_diff.columns)
 
         # Calculate rate differential
-        # rate_diff = (Forward - Spot) / Spot ≈ r_EUR - r_ccy
         rate_diffs = fx_fwd_diff.loc[common_dates, common_ccys] / fx_spot_prices.loc[common_dates, common_ccys]
 
         logger.debug(
             f"Calculated rate differentials for {len(common_ccys)} currencies, "
-            f"{len(common_dates)} dates"
+            f"{len(common_dates)} dates "
+            f"(tenor={self.tenor}, unit={self.unit})"
         )
 
         return rate_diffs
@@ -292,5 +334,5 @@ class FxForwardComponent(Component):
     def __repr__(self) -> str:
         return (
             f"FxForwardComponent({len(self.fxfwd_composition)} instruments, "
-            f"T+{self.settlement_days})"
+            f"tenor={self.tenor}, unit={self.unit}, T+{self.settlement_days})"
         )

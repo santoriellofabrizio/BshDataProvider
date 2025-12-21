@@ -1,0 +1,209 @@
+======================================================================
+ORACLE PROVIDER PROFILING REPORT - Mode: BOTTLENECK
+Generated: 2025-12-17 21:58:19
+Execution time: 74.10 seconds
+======================================================================
+
+======================================================================
+TOP 50 BY CUMULATIVE TIME
+======================================================================
+         9109911 function calls (9039096 primitive calls) in 74.077 seconds
+
+   Ordered by: cumulative time
+   List reduced from 1152 to 50 due to restriction <50>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+        1    0.002    0.002   74.100   74.100 C:\AFMachineLearning\Libraries\BshDataProvider\example.py:194(run_bottleneck_profile)
+      910    0.008    0.000   74.014    0.081 C:\AFMachineLearning\Libraries\BshDataProvider\src\bshdata\core\decorators\respect_cache_status.py:15(wrapper)
+      910    0.041    0.000   74.005    0.081 C:\AFMachineLearning\Libraries\BshDataProvider\src\interface\api\info_data_api.py:102(get)
+        1    0.008    0.008   73.693   73.693 C:\AFMachineLearning\Libraries\BshDataProvider\example.py:106(test_speed_lookup_900)
+      900    0.005    0.000   73.655    0.082 C:\AFMachineLearning\Libraries\BshDataProvider\src\interface\api\info_data_api.py:319(get_etp_fields)
+      910    0.034    0.000   70.291    0.077 C:\AFMachineLearning\Libraries\BshDataProvider\src\interface\api\info_data_api.py:53(_dispatch)
+      912    0.029    0.000   70.122    0.077 C:\AFMachineLearning\Libraries\BshDataProvider\src\bshdata\client.py:75(send)
+      913    0.025    0.000   69.261    0.076 C:\AFMachineLearning\Libraries\BshDataProvider\src\bshdata\core\utils\memory_provider.py:283(wrapper)
+      912    0.006    0.000   69.060    0.076 C:\AFMachineLearning\Libraries\BshDataProvider\src\bshdata\client.py:110(_dispatch)
+      912    0.013    0.000   69.054    0.076 C:\AFMachineLearning\Libraries\BshDataProvider\src\bshdata\providers\oracle\provider.py:129(fetch_info_data)
+      912    0.010    0.000   69.035    0.076 C:\AFMachineLearning\Libraries\BshDataProvider\src\bshdata\providers\oracle\fetchers\oracle_info_fetcher.py:105(_run_chain)
+ 1810/910    0.041    0.000   68.952    0.076 C:\AFMachineLearning\Libraries\BshDataProvider\src\bshdata\providers\oracle\handlers\base_handlers.py:19(handle)
+      900    0.004    0.000   68.679    0.076 C:\AFMachineLearning\Libraries\BshDataProvider\src\bshdata\providers\oracle\fetchers\oracle_info_fetcher.py:136(fetch_reference)
+      900    0.036    0.000   68.554    0.076 C:\AFMachineLearning\Libraries\BshDataProvider\src\bshdata\providers\oracle\handlers\reference_field_handler.py:43(process)
+      913    0.006    0.000   66.843    0.073 C:\Users\GBS08935\AppData\Roaming\Python\Python311\site-packages\joblib\memory.py:575(__call__)
+      913    0.015    0.000   66.837    0.073 C:\Users\GBS08935\AppData\Roaming\Python\Python311\site-packages\joblib\memory.py:461(_cached_call)
+      844    0.019    0.000   57.369    0.068 C:\Users\GBS08935\AppData\Roaming\Python\Python311\site-packages\joblib\memory.py:767(_call)
+      844    0.048    0.000   46.412    0.055 C:\AFMachineLearning\Libraries\BshDataProvider\src\bshdata\providers\oracle\query_oracle.py:926(get_etf_static_field)
+      844    0.027    0.000   46.317    0.055 C:\Users\GBS08935\AppData\Local\Programs\Python\Python311\Lib\site-packages\sfm_dbconnections\OracleConnection.py:68(execute_query)
+      844   46.131    0.055   46.178    0.055 C:\Users\GBS08935\AppData\Roaming\Python\Python311\site-packages\oracledb\cursor.py:658(execute)
+      844    0.023    0.000   10.936    0.013 C:\Users\GBS08935\AppData\Roaming\Python\Python311\site-packages\joblib\memory.py:779(_after_call)
+      913    0.008    0.000    7.739    0.008 C:\Users\GBS08935\AppData\Roaming\Python\Python311\site-packages\joblib\memory.py:433(_is_in_cache_and_valid)
+     1688    0.017    0.000    7.543    0.004 C:\Users\GBS08935\AppData\Roaming\Python\Python311\site-packages\joblib\_store_backends.py:383(_concurrency_safe_write)
+      913    0.021    0.000    7.380    0.008 C:\Users\GBS08935\AppData\Roaming\Python\Python311\site-packages\joblib\memory.py:648(_check_previous_func_code)
+      913    0.024    0.000    6.524    0.007 C:\Users\GBS08935\AppData\Roaming\Python\Python311\site-packages\joblib\memory.py:534(func_code_info)
+      913    0.681    0.001    6.500    0.007 C:\Users\GBS08935\AppData\Roaming\Python\Python311\site-packages\joblib\func_inspect.py:25(get_func_code)
+      844    0.028    0.000    5.824    0.007 C:\Users\GBS08935\AppData\Roaming\Python\Python311\site-packages\joblib\_store_backends.py:190(dump_item)
+      844    0.029    0.000    5.088    0.006 C:\Users\GBS08935\AppData\Roaming\Python\Python311\site-packages\joblib\memory.py:794(_persist_input)
+      913    0.574    0.001    4.755    0.005 C:\Users\GBS08935\AppData\Local\Programs\Python\Python311\Lib\inspect.py:1220(getblock)
+      844    0.016    0.000    4.447    0.005 C:\Users\GBS08935\AppData\Roaming\Python\Python311\site-packages\joblib\_store_backends.py:248(store_metadata)
+     1688    0.032    0.000    4.124    0.002 C:\Users\GBS08935\AppData\Roaming\Python\Python311\site-packages\joblib\_store_backends.py:31(concurrency_safe_write)
+     3653    4.053    0.001    4.053    0.001 {built-in method io.open}
+   347182    2.243    0.000    3.790    0.000 C:\Users\GBS08935\AppData\Local\Programs\Python\Python311\Lib\tokenize.py:433(_tokenize)
+     1688    0.011    0.000    3.402    0.002 C:\Users\GBS08935\AppData\Roaming\Python\Python311\site-packages\joblib\backports.py:154(concurrency_safe_rename)
+     1688    3.390    0.002    3.390    0.002 {built-in method nt.replace}
+     1688    0.005    0.000    2.361    0.001 C:\Users\GBS08935\AppData\Roaming\Python\Python311\site-packages\joblib\_store_backends.py:409(create_location)
+     1688    0.017    0.000    2.356    0.001 C:\Users\GBS08935\AppData\Roaming\Python\Python311\site-packages\joblib\disk.py:56(mkdirp)
+     1689    0.021    0.000    2.339    0.001 <frozen os>:200(makedirs)
+      910    0.008    0.000    2.214    0.002 C:\AFMachineLearning\Libraries\BshDataProvider\src\interface\api\info_data_api.py:172(<listcomp>)
+      910    0.006    0.000    2.206    0.002 C:\AFMachineLearning\Libraries\BshDataProvider\src\interface\api\base_api.py:100(_build_instrument)
+      910    0.013    0.000    2.200    0.002 C:\AFMachineLearning\Libraries\BshDataProvider\src\bshdata\core\instruments\instrument_factory.py:45(create)
+      844    0.019    0.000    2.181    0.003 C:\Users\GBS08935\AppData\Roaming\Python\Python311\site-packages\joblib\_store_backends.py:200(write_func)
+      910    0.020    0.000    2.170    0.002 C:\AFMachineLearning\Libraries\BshDataProvider\src\bshdata\core\instruments\instrument_factory.py:123(_build_etp)
+      844    0.019    0.000    1.890    0.002 C:\Users\GBS08935\AppData\Roaming\Python\Python311\site-packages\joblib\_store_backends.py:255(write_func)
+     1689    1.857    0.001    1.857    0.001 {built-in method nt.mkdir}
+     4496    0.058    0.000    1.825    0.000 C:\Users\GBS08935\AppData\Roaming\Python\Python311\site-packages\joblib\func_inspect.py:95(get_func_name)
+    26976    0.242    0.000    1.717    0.000 C:\Users\GBS08935\AppData\Roaming\Python\Python311\site-packages\joblib\func_inspect.py:81(_clean_win_chars)
+      910    0.024    0.000    1.686    0.002 C:\AFMachineLearning\Libraries\BshDataProvider\src\bshdata\core\instruments\classifier\etp_classifier.py:77(get_undelying_type)
+     1826    0.019    0.000    1.620    0.001 C:\Users\GBS08935\AppData\Roaming\Python\Python311\site-packages\joblib\memory.py:614(_get_args_id)
+     2670    0.108    0.000    1.611    0.001 C:\Users\GBS08935\AppData\Roaming\Python\Python311\site-packages\joblib\func_inspect.py:201(filter_args)
+
+
+
+
+======================================================================
+BSHDATA FUNCTIONS
+======================================================================
+         9109911 function calls (9039096 primitive calls) in 74.077 seconds
+
+   Ordered by: cumulative time
+   List reduced from 1152 to 94 due to restriction <'bshdata'>
+   List reduced from 94 to 40 due to restriction <40>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+      910    0.008    0.000   74.014    0.081 C:\AFMachineLearning\Libraries\BshDataProvider\src\bshdata\core\decorators\respect_cache_status.py:15(wrapper)
+      912    0.029    0.000   70.122    0.077 C:\AFMachineLearning\Libraries\BshDataProvider\src\bshdata\client.py:75(send)
+      913    0.025    0.000   69.261    0.076 C:\AFMachineLearning\Libraries\BshDataProvider\src\bshdata\core\utils\memory_provider.py:283(wrapper)
+      912    0.006    0.000   69.060    0.076 C:\AFMachineLearning\Libraries\BshDataProvider\src\bshdata\client.py:110(_dispatch)
+      912    0.013    0.000   69.054    0.076 C:\AFMachineLearning\Libraries\BshDataProvider\src\bshdata\providers\oracle\provider.py:129(fetch_info_data)
+      912    0.010    0.000   69.035    0.076 C:\AFMachineLearning\Libraries\BshDataProvider\src\bshdata\providers\oracle\fetchers\oracle_info_fetcher.py:105(_run_chain)
+ 1810/910    0.041    0.000   68.952    0.076 C:\AFMachineLearning\Libraries\BshDataProvider\src\bshdata\providers\oracle\handlers\base_handlers.py:19(handle)
+      900    0.004    0.000   68.679    0.076 C:\AFMachineLearning\Libraries\BshDataProvider\src\bshdata\providers\oracle\fetchers\oracle_info_fetcher.py:136(fetch_reference)
+      900    0.036    0.000   68.554    0.076 C:\AFMachineLearning\Libraries\BshDataProvider\src\bshdata\providers\oracle\handlers\reference_field_handler.py:43(process)
+      844    0.048    0.000   46.412    0.055 C:\AFMachineLearning\Libraries\BshDataProvider\src\bshdata\providers\oracle\query_oracle.py:926(get_etf_static_field)
+      910    0.013    0.000    2.200    0.002 C:\AFMachineLearning\Libraries\BshDataProvider\src\bshdata\core\instruments\instrument_factory.py:45(create)
+      910    0.020    0.000    2.170    0.002 C:\AFMachineLearning\Libraries\BshDataProvider\src\bshdata\core\instruments\instrument_factory.py:123(_build_etp)
+      910    0.024    0.000    1.686    0.002 C:\AFMachineLearning\Libraries\BshDataProvider\src\bshdata\core\instruments\classifier\etp_classifier.py:77(get_undelying_type)
+      912    0.293    0.000    0.928    0.001 C:\AFMachineLearning\Libraries\BshDataProvider\src\bshdata\client.py:118(_update_tracking)
+   417229    0.512    0.000    0.512    0.000 C:\AFMachineLearning\Libraries\BshDataProvider\src\bshdata\core\enums\request_state.py:68(is_terminal)
+      910    0.002    0.000    0.418    0.000 C:\AFMachineLearning\Libraries\BshDataProvider\src\bshdata\core\instruments\classifier\instrument_classifier.py:70(auto_complete)
+      910    0.003    0.000    0.415    0.000 C:\AFMachineLearning\Libraries\BshDataProvider\src\bshdata\core\instruments\classifier\etp_classifier.py:64(as_ticker)
+     1820    0.002    0.000    0.411    0.000 C:\AFMachineLearning\Libraries\BshDataProvider\src\bshdata\core\instruments\classifier\etp_classifier.py:20(load)
+       10    0.000    0.000    0.294    0.029 C:\AFMachineLearning\Libraries\BshDataProvider\src\bshdata\providers\oracle\fetchers\oracle_info_fetcher.py:139(fetch_historical)
+       10    0.000    0.000    0.293    0.029 C:\AFMachineLearning\Libraries\BshDataProvider\src\bshdata\providers\oracle\handlers\historical_field_handler.py:17(process)
+      912    0.017    0.000    0.103    0.000 C:\AFMachineLearning\Libraries\BshDataProvider\src\bshdata\core\requests\request_builder\info_request_builder.py:65(build)
+      912    0.025    0.000    0.079    0.000 C:\AFMachineLearning\Libraries\BshDataProvider\src\bshdata\core\response_tracking\request_tracker.py:107(update_with_result)
+        2    0.000    0.000    0.066    0.033 C:\AFMachineLearning\Libraries\BshDataProvider\src\bshdata\providers\oracle\fetchers\oracle_info_fetcher.py:145(fetch_general)
+        2    0.000    0.000    0.066    0.033 C:\AFMachineLearning\Libraries\BshDataProvider\src\bshdata\providers\oracle\handlers\general_field_handler.py:31(handle)
+        2    0.000    0.000    0.066    0.033 C:\AFMachineLearning\Libraries\BshDataProvider\src\bshdata\providers\oracle\handlers\general_field_handler.py:21(process)
+      912    0.006    0.000    0.052    0.000 C:\AFMachineLearning\Libraries\BshDataProvider\src\bshdata\core\response_tracking\request_tracker.py:151(mark_sent)
+      912    0.008    0.000    0.045    0.000 C:\AFMachineLearning\Libraries\BshDataProvider\src\bshdata\core\response_tracking\request_status.py:161(with_state)
+      912    0.010    0.000    0.044    0.000 C:\AFMachineLearning\Libraries\BshDataProvider\src\bshdata\core\response_tracking\request_tracker.py:59(track)
+      912    0.020    0.000    0.042    0.000 C:\AFMachineLearning\Libraries\BshDataProvider\src\bshdata\core\response_tracking\request_status.py:193(with_results)
+      910    0.007    0.000    0.037    0.000 C:\AFMachineLearning\Libraries\BshDataProvider\src\bshdata\core\instruments\instruments.py:76(__post_init__)
+      912    0.032    0.000    0.033    0.000 C:\AFMachineLearning\Libraries\BshDataProvider\src\bshdata\core\response_tracking\request_tracker.py:248(get_all)
+      912    0.012    0.000    0.030    0.000 C:\AFMachineLearning\Libraries\BshDataProvider\src\bshdata\core\response_tracking\request_status.py:268(create_pending_status)
+      912    0.008    0.000    0.029    0.000 C:\AFMachineLearning\Libraries\BshDataProvider\src\bshdata\core\requests\request_builder\info_request_builder.py:30(compose_params)
+      910    0.009    0.000    0.029    0.000 C:\AFMachineLearning\Libraries\BshDataProvider\src\bshdata\core\instruments\instruments.py:25(__post_init__)
+      912    0.013    0.000    0.027    0.000 C:\AFMachineLearning\Libraries\BshDataProvider\src\bshdata\core\enums\request_state.py:119(can_transition_to)
+      900    0.005    0.000    0.026    0.000 C:\AFMachineLearning\Libraries\BshDataProvider\src\bshdata\core\requests\requests.py:231(__post_init__)
+      910    0.015    0.000    0.026    0.000 C:\AFMachineLearning\Libraries\BshDataProvider\src\bshdata\providers\oracle\handlers\base_handlers.py:92(_normalize_output)
+      912    0.007    0.000    0.022    0.000 C:\AFMachineLearning\Libraries\BshDataProvider\src\bshdata\core\requests\requests.py:90(__post_init__)
+     1820    0.010    0.000    0.021    0.000 C:\AFMachineLearning\Libraries\BshDataProvider\src\bshdata\core\enums\instrument_types.py:19(from_str)
+     1822    0.013    0.000    0.020    0.000 C:\AFMachineLearning\Libraries\BshDataProvider\src\bshdata\core\enums\fields.py:173(from_str)
+
+
+
+
+======================================================================
+ORACLE FUNCTIONS
+======================================================================
+         9109911 function calls (9039096 primitive calls) in 74.077 seconds
+
+   Ordered by: cumulative time
+   List reduced from 1152 to 51 due to restriction <'oracle'>
+   List reduced from 51 to 30 due to restriction <30>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+      912    0.013    0.000   69.054    0.076 C:\AFMachineLearning\Libraries\BshDataProvider\src\bshdata\providers\oracle\provider.py:129(fetch_info_data)
+      912    0.010    0.000   69.035    0.076 C:\AFMachineLearning\Libraries\BshDataProvider\src\bshdata\providers\oracle\fetchers\oracle_info_fetcher.py:105(_run_chain)
+ 1810/910    0.041    0.000   68.952    0.076 C:\AFMachineLearning\Libraries\BshDataProvider\src\bshdata\providers\oracle\handlers\base_handlers.py:19(handle)
+      900    0.004    0.000   68.679    0.076 C:\AFMachineLearning\Libraries\BshDataProvider\src\bshdata\providers\oracle\fetchers\oracle_info_fetcher.py:136(fetch_reference)
+      900    0.036    0.000   68.554    0.076 C:\AFMachineLearning\Libraries\BshDataProvider\src\bshdata\providers\oracle\handlers\reference_field_handler.py:43(process)
+      844    0.048    0.000   46.412    0.055 C:\AFMachineLearning\Libraries\BshDataProvider\src\bshdata\providers\oracle\query_oracle.py:926(get_etf_static_field)
+      844   46.131    0.055   46.178    0.055 C:\Users\GBS08935\AppData\Roaming\Python\Python311\site-packages\oracledb\cursor.py:658(execute)
+        1    0.000    0.000    0.405    0.405 C:\AFMachineLearning\Libraries\BshDataProvider\example.py:126(test_nav_oracle)
+       10    0.000    0.000    0.294    0.029 C:\AFMachineLearning\Libraries\BshDataProvider\src\bshdata\providers\oracle\fetchers\oracle_info_fetcher.py:139(fetch_historical)
+       10    0.000    0.000    0.293    0.029 C:\AFMachineLearning\Libraries\BshDataProvider\src\bshdata\providers\oracle\handlers\historical_field_handler.py:17(process)
+        2    0.000    0.000    0.066    0.033 C:\AFMachineLearning\Libraries\BshDataProvider\src\bshdata\providers\oracle\fetchers\oracle_info_fetcher.py:145(fetch_general)
+        2    0.000    0.000    0.066    0.033 C:\AFMachineLearning\Libraries\BshDataProvider\src\bshdata\providers\oracle\handlers\general_field_handler.py:31(handle)
+        2    0.000    0.000    0.066    0.033 C:\AFMachineLearning\Libraries\BshDataProvider\src\bshdata\providers\oracle\handlers\general_field_handler.py:21(process)
+     1688    0.040    0.000    0.049    0.000 C:\Users\GBS08935\AppData\Roaming\Python\Python311\site-packages\oracledb\cursor.py:776(fetchmany)
+      844    0.045    0.000    0.047    0.000 C:\Users\GBS08935\AppData\Roaming\Python\Python311\site-packages\oracledb\cursor.py:123(_prepare_for_execute)
+     1688    0.015    0.000    0.038    0.000 C:\Users\GBS08935\AppData\Roaming\Python\Python311\site-packages\oracledb\cursor.py:245(description)
+      910    0.015    0.000    0.026    0.000 C:\AFMachineLearning\Libraries\BshDataProvider\src\bshdata\providers\oracle\handlers\base_handlers.py:92(_normalize_output)
+     1688    0.009    0.000    0.017    0.000 C:\Users\GBS08935\AppData\Roaming\Python\Python311\site-packages\oracledb\cursor.py:256(<listcomp>)
+      910    0.011    0.000    0.017    0.000 C:\AFMachineLearning\Libraries\BshDataProvider\src\bshdata\providers\oracle\handlers\base_handlers.py:183(_ensure_all_instruments_present)
+      844    0.017    0.000    0.017    0.000 C:\Users\GBS08935\AppData\Roaming\Python\Python311\site-packages\oracledb\cursor.py:54(__del__)
+      844    0.009    0.000    0.015    0.000 C:\AFMachineLearning\Libraries\BshDataProvider\src\bshdata\providers\oracle\query_oracle.py:33(_in_clause)
+      844    0.005    0.000    0.014    0.000 C:\Users\GBS08935\AppData\Roaming\Python\Python311\site-packages\oracledb\connection.py:669(cursor)
+      900    0.007    0.000    0.011    0.000 C:\AFMachineLearning\Libraries\BshDataProvider\src\bshdata\providers\oracle\handlers\reference_field_handler.py:37(can_handle)
+     4220    0.008    0.000    0.010    0.000 C:\Users\GBS08935\AppData\Roaming\Python\Python311\site-packages\oracledb\cursor.py:140(_verify_open)
+     3376    0.005    0.000    0.009    0.000 C:\Users\GBS08935\AppData\Roaming\Python\Python311\site-packages\oracledb\fetch_info.py:97(_from_impl)
+      844    0.008    0.000    0.008    0.000 C:\Users\GBS08935\AppData\Roaming\Python\Python311\site-packages\oracledb\cursor.py:46(__init__)
+      912    0.005    0.000    0.006    0.000 C:\AFMachineLearning\Libraries\BshDataProvider\src\bshdata\providers\oracle\fetchers\oracle_info_fetcher.py:85(_group_by_field)
+     1688    0.003    0.000    0.006    0.000 C:\Users\GBS08935\AppData\Roaming\Python\Python311\site-packages\oracledb\cursor.py:132(_verify_fetch)
+     1688    0.004    0.000    0.005    0.000 C:\Users\GBS08935\AppData\Roaming\Python\Python311\site-packages\oracledb\fetch_info.py:63(__getitem__)
+      844    0.003    0.000    0.005    0.000 C:\AFMachineLearning\Libraries\BshDataProvider\src\bshdata\providers\oracle\query_oracle.py:996(<dictcomp>)
+
+
+
+
+======================================================================
+HIGH CALL COUNT
+======================================================================
+         9109911 function calls (9039096 primitive calls) in 74.077 seconds
+
+   Ordered by: call count
+   List reduced from 1152 to 30 due to restriction <30>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+1121426/1119587    0.327    0.000    0.438    0.000 {built-in method builtins.isinstance}
+718678/701827    0.136    0.000    0.155    0.000 {built-in method builtins.len}
+   417229    0.512    0.000    0.512    0.000 C:\AFMachineLearning\Libraries\BshDataProvider\src\bshdata\core\enums\request_state.py:68(is_terminal)
+   367960    0.135    0.000    0.184    0.000 C:\Users\GBS08935\AppData\Local\Programs\Python\Python311\Lib\pickle.py:287(read)
+   367675    0.026    0.000    0.026    0.000 {method 'read' of '_io.BytesIO' objects}
+   355174    0.160    0.000    0.160    0.000 {built-in method __new__ of type object at 0x00007FF8DD270FD0}
+   347182    2.243    0.000    3.790    0.000 C:\Users\GBS08935\AppData\Local\Programs\Python\Python311\Lib\tokenize.py:433(_tokenize)
+   346269    0.279    0.000    0.429    0.000 <string>:1(<lambda>)
+   346269    0.386    0.000    0.386    0.000 C:\Users\GBS08935\AppData\Local\Programs\Python\Python311\Lib\inspect.py:1177(tokeneater)
+   335641    0.908    0.000    0.908    0.000 {method 'match' of 're.Pattern' objects}
+   308185    0.112    0.000    0.112    0.000 {method 'span' of 're.Match' objects}
+   280492    0.108    0.000    0.108    0.000 {method 'encode' of 'str' objects}
+   251126    0.078    0.000    0.078    0.000 {method 'isidentifier' of 'str' objects}
+   201910    0.033    0.000    0.033    0.000 {method 'append' of 'list' objects}
+   167614    0.069    0.000    0.069    0.000 {method 'replace' of 'str' objects}
+   147450    0.076    0.000    0.087    0.000 {method 'join' of 'str' objects}
+   134880    0.634    0.000    1.002    0.000 C:\Users\GBS08935\AppData\Local\Programs\Python\Python311\Lib\urllib\parse.py:923(quote_from_bytes)
+   134880    0.134    0.000    0.185    0.000 C:\Users\GBS08935\AppData\Local\Programs\Python\Python311\Lib\urllib\parse.py:941(<listcomp>)
+   134880    0.274    0.000    1.355    0.000 C:\Users\GBS08935\AppData\Local\Programs\Python\Python311\Lib\urllib\parse.py:847(quote)
+   134880    0.048    0.000    0.048    0.000 {method 'rstrip' of 'bytes' objects}
+   134880    0.051    0.000    0.051    0.000 {method '__getitem__' of 'dict' objects}
+106794/106784    0.052    0.000    0.053    0.000 {built-in method builtins.getattr}
+    73563    0.031    0.000    0.071    0.000 C:\Users\GBS08935\AppData\Local\Programs\Python\Python311\Lib\pickle.py:1617(load_binget)
+    67276    0.104    0.000    0.129    0.000 {built-in method builtins.hasattr}
+    65500    0.033    0.000    0.033    0.000 {method 'get' of 'dict' objects}
+    45049    0.041    0.000    0.055    0.000 C:\AFMachineLearning\Libraries\BshDataProvider\venv\Lib\site-packages\pandas\core\dtypes\generic.py:37(_check)
+    45049    0.042    0.000    0.099    0.000 C:\AFMachineLearning\Libraries\BshDataProvider\venv\Lib\site-packages\pandas\core\dtypes\generic.py:42(_instancecheck)
+    44608    0.014    0.000    0.014    0.000 {built-in method nt.fspath}
+    44555    0.016    0.000    0.020    0.000 C:\Users\GBS08935\AppData\Local\Programs\Python\Python311\Lib\pickle.py:1656(load_memoize)
+    43098    0.015    0.000    0.015    0.000 {built-in method builtins.id}
+
+
+
