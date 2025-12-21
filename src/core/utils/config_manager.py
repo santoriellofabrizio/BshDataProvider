@@ -113,9 +113,17 @@ class ConfigManager:
     Features:
     - Loads config file once and caches result
     - Supports environment variables (BSH_* prefix)
+    - Supports .env files (if python-dotenv is installed)
     - Validates required fields
     - Provides typed access to config sections
     - Handles missing config files gracefully
+    
+    Configuration precedence (highest to lowest):
+    1. Constructor arguments (explicit overrides)
+    2. Environment variables (BSH_* prefix)
+    3. .env file (if python-dotenv installed)
+    4. YAML config file
+    5. Dataclass defaults
     """
     
     _instance: Optional['ConfigManager'] = None
@@ -132,6 +140,28 @@ class ConfigManager:
     def __init__(self):
         """Private constructor - use load() class method."""
         self._yaml = YAML(typ="safe")
+        self._load_dotenv()
+    
+    def _load_dotenv(self) -> None:
+        """Load .env file if it exists and python-dotenv is available."""
+        try:
+            from dotenv import load_dotenv
+            # Try to load .env from common locations
+            env_paths = [
+                Path(".env"),
+                Path("config/.env"),
+                Path.home() / ".bshdata" / ".env",
+            ]
+            for env_path in env_paths:
+                if env_path.exists():
+                    load_dotenv(env_path, override=False)  # Don't override existing env vars
+                    logger.debug(f"Loaded .env file from {env_path}")
+                    return
+        except ImportError:
+            # python-dotenv not installed, skip .env loading
+            pass
+        except Exception as e:
+            logger.debug(f"Failed to load .env file: {e}")
     
     @classmethod
     def load(cls, config_path: Optional[str] = None) -> 'ConfigManager':
