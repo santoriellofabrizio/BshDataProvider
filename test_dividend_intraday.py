@@ -77,12 +77,8 @@ def test_intraday_dividend_period_returns():
     div_component = DividendComponent(dividends)
     
     # Calculate adjustments
-    adjustments = div_component.calculate_batch(
-        instruments=instruments,
-        dates=timestamps.tolist(),
-        prices=prices,
-        fx_prices=fx_prices
-    )
+    adjustments = div_component.calculate_adjustment(instruments=instruments, dates=timestamps.tolist(), prices=prices,
+                                                     fx_prices=fx_prices)
     
     print("\nTimestamps and Adjustments:")
     print("-" * 70)
@@ -174,12 +170,8 @@ def test_daily_mode_unchanged():
     
     div_component = DividendComponent(dividends)
     
-    adjustments = div_component.calculate_batch(
-        instruments=instruments,
-        dates=dates.tolist(),
-        prices=prices,
-        fx_prices=fx_prices
-    )
+    adjustments = div_component.calculate_adjustment(instruments=instruments, dates=dates.tolist(), prices=prices,
+                                                     fx_prices=fx_prices)
     
     print("\nDaily Adjustments:")
     for dt, adj in adjustments['SPY US'].items():
@@ -232,12 +224,8 @@ def test_multiple_dividends():
     
     div_component = DividendComponent(dividends)
     
-    adjustments = div_component.calculate_batch(
-        instruments=instruments,
-        dates=timestamps.tolist(),
-        prices=prices,
-        fx_prices=fx_prices
-    )
+    adjustments = div_component.calculate_adjustment(instruments=instruments, dates=timestamps.tolist(), prices=prices,
+                                                     fx_prices=fx_prices)
     
     print("\nAdjustments:")
     for ts in timestamps:

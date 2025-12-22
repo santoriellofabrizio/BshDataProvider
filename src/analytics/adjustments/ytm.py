@@ -4,7 +4,7 @@ YTM (Yield to Maturity) adjustment component for Fixed Income ETF.
 Calculates yield carry cost for bond ETFs.
 """
 from datetime import date, datetime
-from typing import Union, List
+from typing import Union, List, Optional
 import pandas as pd
 import logging
 
@@ -37,7 +37,12 @@ class YtmComponent(Component):
         adjuster.add(YtmComponent(ytm, settlement_days=2))
     """
 
-    def __init__(self, ytm: pd.DataFrame, settlement_days: int = 2):
+    def __init__(
+        self, 
+        ytm: pd.DataFrame, 
+        settlement_days: int = 2,
+        target: Optional[List[str]] = None
+    ):
         """
         Initialize YTM component.
 
@@ -48,18 +53,39 @@ class YtmComponent(Component):
                  Values: YTM in decimal (0.045 = 4.5%)
                  Sparse OK (NaN = 0)
             settlement_days: Settlement lag (T+1=1, T+2=2, T+3=3)
+            target: Optional list of instrument IDs to apply adjustments to
+        
+        Example:
+            # Apply to all instruments with YTM data
+            ytm_comp = YtmComponent(ytm_data)
+            
+            # Apply only to specific bonds
+            ytm_comp = YtmComponent(ytm_data, target=['BOND_A', 'BOND_B'])
         """
+        super().__init__(target)
+        
         self.ytm_series = ytm.fillna(0.0)
         self.settlement_days = settlement_days
+        
+        # Validate target compatibility
+        if self.target is not None:
+            missing_data = self.target - set(self.ytm_series.columns)
+            if missing_data:
+                logger.warning(
+                    f"YtmComponent: Target contains {len(missing_data)} instruments "
+                    f"without YTM data: {sorted(missing_data)[:5]}{'...' if len(missing_data) > 5 else ''}. "
+                    "These will receive zero YTM adjustments."
+                )
 
         logger.info(
-            f"YtmComponent initialized: {len(self.ytm_series.columns)} instruments, "
+            f"YtmComponent: {len(self.ytm_series.columns)} instruments with YTM data, "
             f"T+{settlement_days} settlement"
+            f"{f', target={len(self.target)} instruments' if self.target else ''}"
         )
 
     def is_applicable(self, instrument: InstrumentProtocol) -> bool:
         """
-        Check if YTM applicable.
+        Check if YTM applicable (domain logic only).
 
         Applicable if:
         - ETP with FIXED INCOME or MONEY MARKET underlying
@@ -75,9 +101,6 @@ class YtmComponent(Component):
             if isinstance(instrument, EtfInstrumentProtocol):
                 underlying = instrument.underlying_type
                 if underlying and underlying not in ['FIXED INCOME', 'MONEY MARKET']:
-                    logger.debug(
-                        f"{instrument.id} is {underlying}, not Fixed Income, skipping YTM"
-                    )
                     return False
             return True
 
@@ -87,11 +110,7 @@ class YtmComponent(Component):
                 underlying = instrument.underlying_type
                 if underlying and underlying == 'FIXED INCOME':
                     return True
-                logger.debug(
-                    f"{instrument.id} is {underlying}, not Fixed Income Future, skipping YTM"
-                )
                 return False
-            # If no underlying_type, check if has YTM data (assume applicable)
             return True
 
         # INDEX: Check index_type attribute
@@ -100,59 +119,67 @@ class YtmComponent(Component):
                 index_type = instrument.index_type
                 if index_type and index_type == 'FIXED INCOME':
                     return True
-                logger.debug(
-                    f"{instrument.id} is {index_type}, not Fixed Income Index, skipping YTM"
-                )
                 return False
-            # If no index_type, check if has YTM data (assume applicable)
             return True
 
         return False
 
-    def calculate_batch(
-            self,
-            instruments: dict[str, InstrumentProtocol],
-            dates: Union[List[date], List[datetime]],
-            prices: pd.DataFrame,
-            fx_prices: pd.DataFrame,
+    def calculate_adjustment(
+        self,
+        instruments: dict[str, InstrumentProtocol],
+        dates: Union[List[date], List[datetime]],
+        prices: pd.DataFrame,
+        fx_prices: pd.DataFrame,
     ) -> pd.DataFrame:
         """Calculate YTM adjustments with vectorized operations."""
+        # 1. Normalize dates to datetime (MANDATORY)
+        dates_dt = self._normalize_dates(dates)
+        
         instrument_ids = list(instruments.keys())
-        result = pd.DataFrame(0.0, index=dates, columns=instrument_ids)
+        result = pd.DataFrame(0.0, index=dates_dt, columns=instrument_ids)
 
-        # Filter applicable
+        # 2. Filter applicable (USE should_apply, NOT is_applicable)
         applicable_ids = [
             inst.id for inst in instruments.values()
-            if self.is_applicable(inst) and inst.id in self.ytm_series.columns
+            if self.should_apply(inst) and inst.id in self.ytm_series.columns
         ]
 
+        # 3. Early return if no applicable
         if not applicable_ids:
-            logger.debug("No applicable instruments for YtmComponent")
+            logger.debug(
+                f"YtmComponent: No applicable instruments. "
+                f"Total: {len(instruments)}"
+                f"{f', target filter: {len(self.target)}' if self.target else ''}"
+            )
             return result
 
-        logger.debug(f"YtmComponent: {len(applicable_ids)}/{len(instruments)} instruments")
+        # 4. Log processing
+        logger.info(
+            f"YtmComponent: Processing {len(applicable_ids)}/{len(instruments)} instruments"
+        )
 
-        # Calculate shifted year fractions once (T+2 settlement)
+        # 5. Calculate shifted year fractions once (T+2 settlement)
         year_fractions_shifted = calculate_year_fractions(
-            dates,
+            dates_dt,
             shifted=True,
             settlement_days=self.settlement_days
         )
 
-        # Get YTM data for applicable instruments
+        # 6. Get YTM data for applicable instruments
         ytm_applicable = self.ytm_series[applicable_ids]
 
-        # Align dates
-        common_dates = ytm_applicable.index.intersection(dates)
+        # 7. Align dates
+        common_dates = ytm_applicable.index.intersection(dates_dt)
         if len(common_dates) == 0:
-            logger.warning("No common dates between YTM data and requested dates")
+            logger.error(
+                f"YtmComponent: ZERO adjustments - no date overlap. "
+                f"YTM dates: {ytm_applicable.index.min()} to {ytm_applicable.index.max()}, "
+                f"Requested: {dates_dt[0]} to {dates_dt[-1]}. "
+                "Check data alignment."
+            )
             return result
 
-        # Vectorized calculation: -YTM × year_fraction_shifted
-        # ytm_applicable: dates × instruments
-        # year_fractions_shifted: Series (dates)
-        # Broadcasting: DataFrame × Series (broadcasts across columns)
-
+        # 8. Vectorized calculation: -YTM × year_fraction_shifted
         ytm_aligned = ytm_applicable.loc[common_dates]
         fractions_aligned = year_fractions_shifted.loc[common_dates]
 
@@ -161,6 +188,20 @@ class YtmComponent(Component):
 
         # Fill result
         result.loc[common_dates, applicable_ids] = result_applicable
+
+        # 9. Summary logging
+        non_zero = (result != 0).sum().sum()
+        if non_zero == 0:
+            logger.warning(
+                f"YtmComponent: Produced ZERO non-zero adjustments for "
+                f"{len(applicable_ids)} instruments. Verify YTM data."
+            )
+        else:
+            mean_adj = result[applicable_ids].mean().mean()
+            logger.debug(
+                f"YtmComponent: Generated {non_zero} non-zero adjustments, "
+                f"mean YTM impact: {mean_adj:.6f}"
+            )
 
         return result
 

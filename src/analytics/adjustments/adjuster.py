@@ -111,9 +111,9 @@ class Adjuster:
             f"{len(self.prices.index)} {'timestamps' if self.intraday else 'dates'}"
         )
     
+    @staticmethod
     def _parse_settlement_days(
-        self, 
-        settlement_days: Union[int, pd.Series, Dict[str, int]], 
+            settlement_days: Union[int, pd.Series, Dict[str, int]],
         instrument_ids: List[str]
     ) -> pd.Series:
         """
@@ -151,19 +151,23 @@ class Adjuster:
             f"settlement_days must be int, pd.Series, or Dict, got {type(settlement_days)}"
         )
 
-    def _normalize_fx_columns(self, fx_prices: pd.DataFrame) -> pd.DataFrame:
+    @staticmethod
+    def _normalize_fx_columns(fx_prices: pd.DataFrame) -> pd.DataFrame:
         """
         Normalize FX price columns from tickers to currency codes.
         
         Converts:
-            EURUSD → USD
-            EURGBP → GBP
-            EURJPY → JPY
-            USD    → USD (unchanged, warning)
-            USDEUR → USD (inverted, warning)
+            EURUSD      → USD
+            EURUSD 1M   → USD
+            EURUSD 3M   → USD
+            EURGBP      → GBP
+            EURGBP 1W   → GBP
+            USD         → USD (unchanged, warning)
+            USDEUR      → USD (inverted)
+            USDEUR 1M   → USD (inverted with tenor)
         
         Args:
-            fx_prices: DataFrame with FX prices
+            fx_prices: DataFrame with FX prices (supports tenor suffixes)
         
         Returns:
             DataFrame with normalized column names and inverted prices where needed
@@ -172,38 +176,59 @@ class Adjuster:
         columns_to_invert = []  # Track which columns need 1/price
         
         for col in fx_prices.columns:
-            col_str = str(col).upper()
+            col_str = str(col).upper().strip()
+            
+            # Extract base ticker (remove tenor suffix if present)
+            # "EURUSD 1M" → "EURUSD", "EURGBP 3M" → "EURGBP"
+            parts = col_str.split()
+            base_ticker = parts[0]
+            tenor = parts[1] if len(parts) > 1 else None
             
             # Case 1: 6-char EUR-based ticker (EURUSD, EURGBP, etc.)
-            if len(col_str) == 6 and col_str.startswith('EUR'):
+            if len(base_ticker) == 6 and base_ticker.startswith('EUR'):
                 # Extract quote currency (last 3 chars)
-                currency = col_str[-3:]
+                currency = base_ticker[-3:]
                 normalized_columns[col] = currency
-                logger.debug(f"Normalized FX column: {col} → {currency}")
+                
+                if tenor:
+                    logger.debug(
+                        f"Normalized FX column with tenor: {col} → {currency} "
+                        f"(tenor: {tenor})"
+                    )
+                else:
+                    logger.debug(f"Normalized FX column: {col} → {currency}")
             
             # Case 2: 6-char inverted ticker (USDEUR, GBPEUR, etc.)
-            elif len(col_str) == 6 and col_str.endswith('EUR'):
+            elif len(base_ticker) == 6 and base_ticker.endswith('EUR'):
                 # Extract base currency (first 3 chars)
-                currency = col_str[:3]
+                currency = base_ticker[:3]
                 normalized_columns[col] = currency
                 columns_to_invert.append(col)
-                logger.warning(
-                    f"FX column '{col}' is inverted (base currency is not EUR). "
-                    f"Inverting prices: 1/{col} → {currency}"
-                )
+                
+                if tenor:
+                    logger.warning(
+                        f"FX column '{col}' is inverted (base currency is not EUR). "
+                        f"Inverting prices: 1/{col} → {currency} (tenor: {tenor})"
+                    )
+                else:
+                    logger.warning(
+                        f"FX column '{col}' is inverted (base currency is not EUR). "
+                        f"Inverting prices: 1/{col} → {currency}"
+                    )
             
             # Case 3: 3-char currency code (USD, GBP, etc.)
-            elif len(col_str) == 3:
-                normalized_columns[col] = col_str
+            elif len(base_ticker) == 3:
+                normalized_columns[col] = base_ticker
                 logger.warning(
                     f"FX column '{col}' is a currency code without EUR base indication. "
-                    f"Assuming it represents EUR{col} (e.g., EUR/{col} rate)."
+                    f"Assuming it represents EUR{base_ticker} (e.g., EUR/{base_ticker} rate)."
                 )
             
             # Case 4: Other formats - warn and keep as-is
             else:
                 logger.warning(
-                    f"FX column '{col}' doesn't match expected format (EURCCY, CCYEUR, or CCY). "
+                    f"FX column '{col}' doesn't match expected format "
+                    f"(EURCCY, CCYEUR, CCY, or EURCCY TENOR). "
                     "Keeping as-is."
                 )
                 normalized_columns[col] = col
@@ -236,7 +261,8 @@ class Adjuster:
         
         return fx_normalized
 
-    def _validate_and_transpose(self, df: pd.DataFrame, name: str) -> pd.DataFrame:
+    @staticmethod
+    def _validate_and_transpose(df: pd.DataFrame, name: str) -> pd.DataFrame:
         """
         Validate DataFrame structure and transpose if needed.
 
@@ -393,12 +419,8 @@ class Adjuster:
             logger.debug(f"Calculating {comp_name}...")
 
             try:
-                component_adj = component.calculate_batch(
-                    instruments=self.instruments,
-                    dates=calc_dates,
-                    prices=self.prices,
-                    fx_prices=self.fx_prices,
-                )
+                component_adj = component.calculate_adjustment(instruments=self.instruments, dates=calc_dates,
+                                                               prices=self.prices, fx_prices=self.fx_prices)
 
                 # Add to total
                 adjustments += component_adj
@@ -506,7 +528,8 @@ class Adjuster:
         # (Static components like TER, YTM remain cached)
         logger.debug(f"FX prices updated, invalidated {len(self._fx_dependent_components)} FX-dependent components")
     
-    def _normalize_fx_series(self, fx_series: pd.Series) -> pd.Series:
+    @staticmethod
+    def _normalize_fx_series(fx_series: pd.Series) -> pd.Series:
         """
         Normalize FX series (similar to _normalize_fx_columns but for Series).
         
@@ -575,12 +598,8 @@ class Adjuster:
             comp_name = component.__class__.__name__
 
             try:
-                breakdown[comp_name] = component.calculate_batch(
-                    instruments=self.instruments,
-                    dates=calc_dates,
-                    prices=self.prices,
-                    fx_prices=self.fx_prices,
-                )
+                breakdown[comp_name] = component.calculate_adjustment(instruments=self.instruments, dates=calc_dates,
+                                                                      prices=self.prices, fx_prices=self.fx_prices)
             except Exception as e:
                 logger.error(f"{comp_name} failed: {e}")
                 breakdown[comp_name] = pd.DataFrame(

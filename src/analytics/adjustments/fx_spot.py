@@ -4,7 +4,7 @@ FX Spot exposure adjustment component for ETF and Stock.
 Adjusts for currency exposure mismatch between portfolio and trading currency.
 """
 from datetime import date, datetime
-from typing import Union, List
+from typing import Union, List, Optional
 import pandas as pd
 import logging
 
@@ -42,7 +42,7 @@ class FxSpotComponent(Component):
     LOWER_SANITY_CHECK = -0.1  # Allow 10% negative for short positions
     UPPER_SANITY_CHECK = 1.1   # Allow 10% over for rounding/leverage
 
-    def __init__(self, fx_composition: pd.DataFrame):
+    def __init__(self, fx_composition: pd.DataFrame, target: Optional[List[str]] = None):
         """
         Initialize FX Spot component.
 
@@ -52,19 +52,28 @@ class FxSpotComponent(Component):
                            Columns: currency codes (USD, GBP, etc.)
                            Values: weights in decimal (0.65 = 65%)
                            Sparse OK (NaN treated as 0)
+            target: Optional list of instrument IDs to apply adjustments to
 
         Example:
             #           USD   GBP   JPY   EUR
             # IWDA LN  0.65  0.10  0.05   NaN
             # VWRL LN  0.60  0.15   NaN  0.25
+            
+            # Apply to all instruments
+            fx_comp = FxSpotComponent(fx_composition)
+            
+            # Apply only to specific instruments
+            fx_comp = FxSpotComponent(fx_composition, target=['IWDA LN'])
         """
+        super().__init__(target)
+        
         # Fill NaN with 0 and validate currencies
         self.fx_composition = fx_composition.fillna(0.0).copy()
 
         # Validate currency codes
         for ccy in self.fx_composition.columns:
             if not CurrencyEnum.exists(str(ccy)):
-                logger.warning(f"Unknown currency in composition: {ccy}")
+                logger.warning(f"FxSpotComponent: Unknown currency in composition: {ccy}")
 
         # Sanity check per instrument
         for instrument_id in self.fx_composition.index:
@@ -72,7 +81,7 @@ class FxSpotComponent(Component):
 
             if not (self.LOWER_SANITY_CHECK <= total <= self.UPPER_SANITY_CHECK):
                 logger.warning(
-                    f"FX composition for {instrument_id} sums to {total:.2%}, "
+                    f"FxSpotComponent: {instrument_id} composition sums to {total:.2%}, "
                     f"expected [{self.LOWER_SANITY_CHECK:.0%}, {self.UPPER_SANITY_CHECK:.0%}]"
                 )
 
@@ -80,15 +89,26 @@ class FxSpotComponent(Component):
             eur_weight = 1.0 - total
             if abs(eur_weight) > 0.001 and 'EUR' in self.fx_composition.columns:
                 self.fx_composition.loc[instrument_id, 'EUR'] += eur_weight
+        
+        # Validate target compatibility
+        if self.target is not None:
+            missing_data = self.target - set(self.fx_composition.index)
+            if missing_data:
+                logger.warning(
+                    f"FxSpotComponent: Target contains {len(missing_data)} instruments "
+                    f"without FX composition: {sorted(missing_data)[:5]}{'...' if len(missing_data) > 5 else ''}. "
+                    "These will receive zero FX spot adjustments."
+                )
 
         logger.info(
-            f"FxSpotComponent initialized: {len(self.fx_composition)} instruments, "
+            f"FxSpotComponent: {len(self.fx_composition)} instruments, "
             f"{len(self.fx_composition.columns)} currencies"
+            f"{f', target={len(self.target)} instruments' if self.target else ''}"
         )
 
     def is_applicable(self, instrument: InstrumentProtocol) -> bool:
         """
-        Check applicability.
+        Check applicability (domain logic only).
 
         Applicable if:
         - STOCK or ETP
@@ -108,12 +128,11 @@ class FxSpotComponent(Component):
                 is_hedged = False
 
             if is_hedged:
-                logger.debug(f"{instrument.id} is currency hedged, skipping FX spot")
                 return False
 
         return True
 
-    def calculate_batch(
+    def calculate_adjustment(
         self,
         instruments: dict[str, InstrumentProtocol],
         dates: Union[List[date], List[datetime]],
@@ -125,45 +144,69 @@ class FxSpotComponent(Component):
 
         Performance: O(N×M×T) → O(N×M + M×T) with matrix multiplication
         """
+        # 1. Normalize dates to datetime (MANDATORY)
+        dates_dt = self._normalize_dates(dates)
+        
         instrument_ids = list(instruments.keys())
 
-        # Filter applicable instruments
+        # 2. Filter applicable (USE should_apply)
         applicable_ids = [
             inst.id for inst in instruments.values()
-            if self.is_applicable(inst) and inst.id in self.fx_composition.index
+            if self.should_apply(inst) and inst.id in self.fx_composition.index
         ]
 
+        # 3. Early return if no applicable
         if not applicable_ids:
-            logger.debug("No applicable instruments for FxSpotComponent")
-            return pd.DataFrame(0.0, index=dates, columns=instrument_ids)
+            logger.debug(
+                f"FxSpotComponent: No applicable instruments. "
+                f"Total: {len(instruments)}"
+                f"{f', target filter: {len(self.target)}' if self.target else ''}"
+            )
+            return pd.DataFrame(0.0, index=dates_dt, columns=instrument_ids)
 
-        logger.debug(f"FxSpotComponent: {len(applicable_ids)}/{len(instruments)} instruments")
+        # 4. Log processing
+        logger.info(
+            f"FxSpotComponent: Processing {len(applicable_ids)}/{len(instruments)} instruments"
+        )
 
-        # Calculate FX returns (dates × currencies)
+        # 5. Calculate FX returns (dates × currencies)
         fx_returns = fx_prices.pct_change().fillna(0.0)
 
         # Ensure dates alignment
-        common_dates = fx_returns.index.intersection(dates)
+        common_dates = fx_returns.index.intersection(dates_dt)
         if len(common_dates) == 0:
-            logger.warning("No common dates between fx_prices and requested dates")
-            return pd.DataFrame(0.0, index=dates, columns=instrument_ids)
+            logger.error(
+                f"FxSpotComponent: ZERO adjustments - no date overlap. "
+                f"FX dates: {fx_returns.index.min()} to {fx_returns.index.max()}, "
+                f"Requested: {dates_dt[0]} to {dates_dt[-1]}. "
+                "Check data alignment."
+            )
+            return pd.DataFrame(0.0, index=dates_dt, columns=instrument_ids)
 
-        # Get composition matrix for applicable instruments
+        # 6. Get composition matrix for applicable instruments
         comp_matrix = self.fx_composition.loc[applicable_ids]  # N × M
 
         # Align currencies between composition and fx_returns
         common_currencies = comp_matrix.columns.intersection(fx_returns.columns)
+        if len(common_currencies) == 0:
+            logger.error(
+                f"FxSpotComponent: No currency overlap. "
+                f"Composition currencies: {list(comp_matrix.columns)}, "
+                f"FX currencies: {list(fx_returns.columns)}"
+            )
+            return pd.DataFrame(0.0, index=dates_dt, columns=instrument_ids)
+        
         comp_matrix = comp_matrix[common_currencies]
         fx_ret_matrix = fx_returns[common_currencies]  # T × M
 
-        # Matrix multiplication: (N × M) @ (M × T)^T = N × T
+        # 7. Matrix multiplication: (N × M) @ (M × T)^T = N × T
         # weighted_fx: instruments × dates
         weighted_fx = comp_matrix @ fx_ret_matrix.T
 
         # Transpose to dates × instruments
         result_applicable = weighted_fx.T
 
-        # Subtract trading currency return per instrument
+        # 8. Subtract trading currency return per instrument
         for inst_id in applicable_ids:
             trading_ccy = str(instruments[inst_id].currency)
 
@@ -173,12 +216,26 @@ class FxSpotComponent(Component):
                     result_applicable[inst_id] - fx_returns[trading_ccy]
                 )
 
-        # Create full result DataFrame
-        result = pd.DataFrame(0.0, index=dates, columns=instrument_ids)
+        # 9. Create full result DataFrame
+        result = pd.DataFrame(0.0, index=dates_dt, columns=instrument_ids)
 
         # Fill with calculated values (align dates)
         for inst_id in applicable_ids:
             result.loc[common_dates, inst_id] = result_applicable[inst_id]
+
+        # 10. Summary logging
+        non_zero = (result != 0).sum().sum()
+        if non_zero == 0:
+            logger.debug(
+                f"FxSpotComponent: ZERO non-zero adjustments for "
+                f"{len(applicable_ids)} instruments (expected if no FX movement)"
+            )
+        else:
+            mean_adj = result[applicable_ids].mean().mean()
+            logger.debug(
+                f"FxSpotComponent: Generated {non_zero} non-zero adjustments, "
+                f"mean FX impact: {mean_adj:.6f}"
+            )
 
         return result
 

@@ -1,10 +1,10 @@
 """
-Repo component for futures financing benefit.
+Repo adjustment component for Futures.
 
-Calculates benefit from avoided financing costs when holding futures.
+Adjusts for repo financing cost when holding futures positions.
 """
 from datetime import date, datetime
-from typing import Literal, Union, List
+from typing import Union, List, Optional
 import pandas as pd
 import logging
 
@@ -18,192 +18,255 @@ logger = logging.getLogger(__name__)
 
 class RepoComponent(Component):
     """
-    Repo financing benefit component.
-
-    Calculates benefit from avoided financing costs when holding futures
-    instead of physical underlying.
+    Repo adjustment component for futures financing cost.
 
     Formula:
-        adjustment = + repo_rate × year_fraction
-        (positive = benefit from not paying financing cost)
+        adjustment = -repo_rate × year_fraction_shifted
 
-    Theory:
-        When you hold a future instead of the physical asset:
-        - You don't need to finance the full notional
-        - You only post margin (typically 5-10% of notional)
-        - You save the repo/financing cost → positive adjustment
+    Two modes:
+    1. Direct repo rates per instrument
+    2. Currency-based repo rates (mapped via future_currencies)
 
     Usage:
-        # Repo rates per currency
+        # Mode 1: Direct repo rates per instrument
         repo_rates = pd.DataFrame({
-            'EUR': [0.020, 0.021],  # 2.0% repo rate
-            'USD': [0.025, 0.026],  # 2.5% repo rate
+            'FUTURE_1': [0.025, 0.026],  # dates × instruments
+            'FUTURE_2': [0.028, 0.029],
         }, index=dates)
 
-        # Map futures to their currencies
+        adjuster.add(RepoComponent(repo_rates, mode='direct'))
+
+        # Mode 2: Currency-based rates
+        repo_rates = pd.DataFrame({
+            'USD': [0.025, 0.026],  # dates × currencies
+            'EUR': [0.020, 0.021],
+        }, index=dates)
+
         future_currencies = pd.Series({
-            'FUTURE_ISIN_1': 'EUR',
-            'FUTURE_ISIN_2': 'USD',
+            'FUTURE_1': 'USD',
+            'FUTURE_2': 'EUR',
         })
 
-        component = RepoComponent(future_currencies, repo_rates)
-
-        # Or provide repo directly per instrument
-        repo_per_instrument = pd.DataFrame({
-            'FUTURE_ISIN_1': [0.020, 0.021],
-            'FUTURE_ISIN_2': [0.025, 0.026],
-        }, index=dates)
-
-        component = RepoComponent(repo_data=repo_per_instrument)
+        adjuster.add(RepoComponent(
+            repo_rates,
+            mode='currency',
+            future_currencies=future_currencies
+        ))
     """
 
     def __init__(
-            self,
-            future_currencies: pd.Series | None = None,
-            repo_rates: pd.DataFrame | None = None,
-            repo_data: pd.DataFrame | None = None,
-            shifted_settlement: Literal["T+1", "T+2", "T+3"] = "T+2",
+        self,
+        repo_rates: pd.DataFrame,
+        mode: str = 'direct',
+        future_currencies: Optional[pd.Series] = None,
+        settlement_days: int = 2,
+        target: Optional[List[str]] = None,
     ):
         """
         Initialize Repo component.
 
-        Two modes of operation:
-
-        Mode 1 - Repo rates per currency (most common):
-            future_currencies: Series mapping ISIN → Currency
-            repo_rates: DataFrame(dates × currencies) with repo rates
-
-        Mode 2 - Repo rates per instrument (direct):
-            repo_data: DataFrame(dates × ISINs) with repo rates
-
         Args:
-            future_currencies: Series mapping future ISIN to currency
-            repo_rates: DataFrame(dates × currencies) with repo rates (decimal)
-            repo_data: DataFrame(dates × ISINs) with repo rates (decimal)
-                      Use this for instrument-specific repo rates
-            shifted_settlement: Settlement convention (T+1, T+2, T+3)
-        """
-        # Validate input
-        if repo_data is not None:
-            # Mode 2: Direct repo per instrument
-            self.mode = "direct"
-            self.repo_data = repo_data.fillna(0.0)
-            self.future_currencies = None
-            self.repo_rates = None
-            n_instruments = len(self.repo_data.columns)
-        else:
-            # Mode 1: Repo per currency
-            if future_currencies is None or repo_rates is None:
-                raise ValueError(
-                    "Either provide repo_data OR both future_currencies and repo_rates"
-                )
-            self.mode = "currency"
-            self.future_currencies = future_currencies
-            self.repo_rates = repo_rates.fillna(0.0)
-            self.repo_data = None
-            n_instruments = len(self.future_currencies)
+            repo_rates: DataFrame with repo rates
+                       Mode 'direct': dates × instrument_ids (rates per instrument)
+                       Mode 'currency': dates × currencies (rates per currency)
+            mode: 'direct' or 'currency'
+            future_currencies: Required if mode='currency'
+                              Series mapping instrument_id → currency code
+            settlement_days: Settlement lag (T+1=1, T+2=2, T+3=3)
+            target: Optional list of instrument IDs to apply adjustments to
 
-        self.settlement_days = int(shifted_settlement.replace("T+", ""))
+        Example:
+            # Direct mode
+            repo_comp = RepoComponent(repo_rates_direct, mode='direct')
+
+            # Currency mode with target
+            repo_comp = RepoComponent(
+                repo_rates_currency,
+                mode='currency',
+                future_currencies=future_currencies,
+                target=['FUTURE_1', 'FUTURE_2']
+            )
+        """
+        super().__init__(target)
+
+        if mode not in ['direct', 'currency']:
+            raise ValueError(f"mode must be 'direct' or 'currency', got '{mode}'")
+
+        if mode == 'currency' and future_currencies is None:
+            raise ValueError("future_currencies required when mode='currency'")
+
+        self.repo_rates = repo_rates.fillna(0.0)
+        self.mode = mode
+        self.future_currencies = future_currencies
+        self.settlement_days = settlement_days
+
+        # Validate target compatibility
+        if self.target is not None:
+            if mode == 'direct':
+                missing_data = self.target - set(self.repo_rates.columns)
+            else:  # currency mode
+                # Check if target instruments have currency mapping
+                missing_data = self.target - set(future_currencies.index if future_currencies is not None else [])
+            
+            if missing_data:
+                logger.warning(
+                    f"RepoComponent: Target contains {len(missing_data)} instruments "
+                    f"without repo data: {sorted(missing_data)[:5]}{'...' if len(missing_data) > 5 else ''}. "
+                    "These will receive zero repo adjustments."
+                )
 
         logger.info(
-            f"RepoComponent: {n_instruments} futures, "
-            f"mode={self.mode}, "
-            f"settlement={shifted_settlement}"
+            f"RepoComponent: mode={mode}, "
+            f"{len(self.repo_rates.columns)} {'instruments' if mode == 'direct' else 'currencies'}, "
+            f"T+{settlement_days} settlement"
+            f"{f', target={len(self.target)} instruments' if self.target else ''}"
         )
 
     def is_applicable(self, instrument: InstrumentProtocol) -> bool:
         """
-        Check if repo benefit applies to this instrument.
+        Check applicability (domain logic only).
 
-        Applicable only to futures.
+        Applicable if:
+        - FUTURE
+        - Has repo data (direct or currency-mapped)
         """
         if instrument.type != InstrumentType.FUTURE:
             return False
 
-        # Check if we have repo data
-        if self.mode == "direct":
-            return instrument.id in self.repo_data.columns
-        else:
-            return instrument.id in self.future_currencies.index
+        # Mode 1: Direct repo rates
+        if self.mode == 'direct':
+            return instrument.id in self.repo_rates.columns
 
-    def calculate_batch(
-            self,
-            instruments: dict[str, InstrumentProtocol],
-            dates: Union[List[date], List[datetime]],
-            prices: pd.DataFrame,
-            fx_prices: pd.DataFrame,
+        # Mode 2: Currency-based rates
+        if self.future_currencies is not None and instrument.id in self.future_currencies.index:
+            ccy = str(self.future_currencies[instrument.id]).upper()
+            return ccy in self.repo_rates.columns
+
+        return False
+
+    def calculate_adjustment(
+        self,
+        instruments: dict[str, InstrumentProtocol],
+        dates: Union[List[date], List[datetime]],
+        prices: pd.DataFrame,
+        fx_prices: pd.DataFrame,
     ) -> pd.DataFrame:
-        """
-        Calculate repo financing benefit.
+        """Calculate repo adjustments."""
+        # 1. Normalize dates to datetime (MANDATORY)
+        dates_dt = self._normalize_dates(dates)
+        
+        instrument_ids = list(instruments.keys())
 
-        Returns:
-            DataFrame(dates × instruments) with repo adjustments
-        """
-        result = pd.DataFrame(0.0, index=dates, columns=list(instruments.keys()))
-
-        # Filter applicable instruments
+        # 2. Filter applicable (USE should_apply)
         applicable_ids = [
-            i.id for i in instruments.values()
-            if self.is_applicable(i)
+            inst.id for inst in instruments.values()
+            if self.should_apply(inst)
         ]
 
+        # 3. Early return if no applicable
         if not applicable_ids:
-            logger.debug("No applicable instruments for RepoComponent")
-            return result
+            logger.debug(
+                f"RepoComponent: No applicable instruments. "
+                f"Total: {len(instruments)}"
+                f"{f', target filter: {len(self.target)}' if self.target else ''}"
+            )
+            return pd.DataFrame(0.0, index=dates_dt, columns=instrument_ids)
 
-        logger.debug(f"RepoComponent: {len(applicable_ids)}/{len(instruments)} instruments")
+        # 4. Log processing
+        logger.info(
+            f"RepoComponent: Processing {len(applicable_ids)}/{len(instruments)} instruments"
+        )
 
-        # Calculate year fractions
-        year_fractions = calculate_year_fractions(
-            dates,
+        # 5. Calculate shifted year fractions
+        year_fractions_shifted = calculate_year_fractions(
+            dates_dt,
             shifted=True,
             settlement_days=self.settlement_days
         )
 
-        if self.mode == "direct":
-            # Mode 2: Direct repo per instrument
-            common_dates = self.repo_data.index.intersection(dates)
-            if len(common_dates) == 0:
-                logger.warning("No common dates between repo data and calculation dates")
-                return result
+        # 6. Align dates
+        common_dates = self.repo_rates.index.intersection(dates_dt)
+        if len(common_dates) == 0:
+            logger.error(
+                f"RepoComponent: ZERO adjustments - no date overlap. "
+                f"Repo dates: {self.repo_rates.index.min()} to {self.repo_rates.index.max()}, "
+                f"Requested: {dates_dt[0]} to {dates_dt[-1]}. "
+                "Check data alignment."
+            )
+            return pd.DataFrame(0.0, index=dates_dt, columns=instrument_ids)
 
-            for isin in applicable_ids:
-                if isin in self.repo_data.columns:
-                    repo_series = self.repo_data.loc[common_dates, isin]
-                    year_frac_aligned = year_fractions.loc[common_dates]
+        # 7. Calculate adjustments based on mode
+        result = pd.DataFrame(0.0, index=dates_dt, columns=instrument_ids)
 
-                    # Positive adjustment (benefit)
-                    result.loc[common_dates, isin] = repo_series * year_frac_aligned
+        year_frac_aligned = year_fractions_shifted.loc[common_dates]
+
+        if self.mode == 'direct':
+            # Mode 1: Direct repo rates per instrument
+            for inst_id in applicable_ids:
+                if inst_id not in self.repo_rates.columns:
+                    logger.warning(f"RepoComponent: No repo data for {inst_id}")
+                    continue
+
+                repo_series = self.repo_rates.loc[common_dates, inst_id]
+                result.loc[common_dates, inst_id] = -repo_series * year_frac_aligned
 
         else:
-            # Mode 1: Repo per currency
-            common_dates = self.repo_rates.index.intersection(dates)
-            if len(common_dates) == 0:
-                logger.warning("No common dates between repo rates and calculation dates")
-                return result
+            # Mode 2: Currency-based rates
+            for inst_id in applicable_ids:
+                if self.future_currencies is None or inst_id not in self.future_currencies.index:
+                    logger.warning(f"RepoComponent: No currency mapping for {inst_id}")
+                    continue
 
-            # For each future, get repo rate for its currency
-            for isin in applicable_ids:
-                ccy = self.future_currencies[isin]
+                # Get currency (normalize to uppercase for matching)
+                ccy_raw = self.future_currencies[inst_id]
+                ccy = str(ccy_raw).upper()
 
+                # Find matching column (case-insensitive)
+                matched_col = None
                 if ccy in self.repo_rates.columns:
-                    repo_series = self.repo_rates.loc[common_dates, ccy]
-                    year_frac_aligned = year_fractions.loc[common_dates]
-
-                    # Positive adjustment (benefit)
-                    result.loc[common_dates, isin] = repo_series * year_frac_aligned
+                    matched_col = ccy
                 else:
+                    # Case-insensitive fallback
+                    matches = [
+                        c for c in self.repo_rates.columns
+                        if str(c).upper() == ccy
+                    ]
+                    if matches:
+                        matched_col = matches[0]
+                        logger.debug(
+                            f"RepoComponent: Matched currency '{ccy_raw}' to '{matched_col}' "
+                            f"for {inst_id}"
+                        )
+
+                if matched_col is None:
                     logger.warning(
-                        f"No repo rate found for currency {ccy} (future {isin})"
+                        f"RepoComponent: No repo rate for currency '{ccy}' "
+                        f"(instrument {inst_id})"
                     )
+                    continue
+
+                repo_series = self.repo_rates.loc[common_dates, matched_col]
+                result.loc[common_dates, inst_id] = -repo_series * year_frac_aligned
+
+        # 8. Summary logging
+        non_zero = (result != 0).sum().sum()
+        if non_zero == 0:
+            logger.warning(
+                f"RepoComponent: Produced ZERO non-zero adjustments for "
+                f"{len(applicable_ids)} instruments. Verify repo data."
+            )
+        else:
+            mean_adj = result[applicable_ids].mean().mean()
+            logger.debug(
+                f"RepoComponent: Generated {non_zero} non-zero adjustments, "
+                f"mean repo impact: {mean_adj:.6f}"
+            )
 
         return result
 
     def __repr__(self) -> str:
-        if self.mode == "direct":
-            n = len(self.repo_data.columns)
-            return f"RepoComponent({n} instruments, mode=direct)"
-        else:
-            n = len(self.future_currencies)
-            n_ccy = len(self.repo_rates.columns)
-            return f"RepoComponent({n} futures, {n_ccy} currencies, mode=currency)"
+        return (
+            f"RepoComponent("
+            f"mode={self.mode}, "
+            f"items={len(self.repo_rates.columns)})"
+        )

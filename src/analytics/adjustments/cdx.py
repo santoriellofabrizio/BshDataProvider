@@ -1,10 +1,10 @@
 """
-CDX (Credit Default Swap Index) component for carry adjustment.
+CDX (Credit Default Swap) carry adjustment component.
 
-Calculates carry cost for CDX instruments based on spread and time to maturity.
+Adjusts for carry cost of credit default swap positions.
 """
 from datetime import date, datetime
-from typing import Union, List
+from typing import Union, List, Optional
 import pandas as pd
 import logging
 
@@ -18,80 +18,82 @@ logger = logging.getLogger(__name__)
 
 class CdxComponent(Component):
     """
-    CDX (Credit Default Swap Index) carry adjustment component.
-    
-    Calculates carry cost for CDX based on:
-    - Spread (in basis points)
-    - Time to maturity (rolling 5Y standard)
-    - Roll dates (March 20, September 20)
-    
+    CDX carry adjustment component for credit default swaps.
+
     Formula:
-        carry = (spread / 10000) × (1 / time_to_maturity_days) × 365 × year_fraction
-    
+        adjustment = cdx_spread × year_fraction_shifted
+
+    Similar to repo but for credit instruments - spread represents carry cost.
+
     Usage:
-        # CDX spreads in basis points
+        # CDX spreads per instrument (basis points → decimal)
         cdx_spreads = pd.DataFrame({
-            'CDX_ISIN_1': [120.5, 122.0, 119.8],  # bp
-            'CDX_ISIN_2': [85.2, 86.1, 84.9],
+            'CDX_INDEX_1': [0.0120, 0.0125],  # 120-125 bps
+            'CDX_INDEX_2': [0.0095, 0.0098],  # 95-98 bps
         }, index=dates)
-        
-        adjuster.add(CdxComponent(cdx_spreads, tenor='5Y'))
+
+        adjuster.add(CdxComponent(cdx_spreads, settlement_days=2))
     """
-    
-    # Roll dates for CDX (March 20, September 20)
-    ROLL_DATES = {
-        'MAR': (3, 20),
-        'SEP': (9, 20),
-    }
-    
-    def __init__(self, cdx_spreads: pd.DataFrame, tenor: str = '5Y'):
+
+    def __init__(
+        self,
+        cdx_spreads: pd.DataFrame,
+        settlement_days: int = 2,
+        target: Optional[List[str]] = None,
+    ):
         """
         Initialize CDX component.
-        
+
         Args:
             cdx_spreads: DataFrame(dates × instruments)
                         Index: dates
-                        Columns: CDX instrument IDs
-                        Values: spreads in basis points (120.5 = 120.5 bp)
-            tenor: CDX tenor (default: '5Y')
-                  Currently only '5Y' is supported
+                        Columns: instrument IDs
+                        Values: CDX spreads in decimal (0.0120 = 120 bps)
+            settlement_days: Settlement lag (T+1=1, T+2=2, T+3=3)
+            target: Optional list of instrument IDs to apply adjustments to
+
+        Example:
+            # Apply to all instruments with CDX data
+            cdx_comp = CdxComponent(cdx_spreads)
+
+            # Apply only to specific indices
+            cdx_comp = CdxComponent(cdx_spreads, target=['CDX_IG', 'CDX_HY'])
         """
+        super().__init__(target)
+
         self.cdx_spreads = cdx_spreads.fillna(0.0)
-        self.tenor = tenor
-        
-        # Validate tenor
-        if tenor != '5Y':
-            raise ValueError(f"Only '5Y' tenor is supported, got '{tenor}'")
-        
-        # Parse tenor to years
-        self.tenor_years = int(tenor.replace('Y', ''))
-        
+        self.settlement_days = settlement_days
+
+        # Validate target compatibility
+        if self.target is not None:
+            missing_data = self.target - set(self.cdx_spreads.columns)
+            if missing_data:
+                logger.warning(
+                    f"CdxComponent: Target contains {len(missing_data)} instruments "
+                    f"without CDX spread data: {sorted(missing_data)[:5]}{'...' if len(missing_data) > 5 else ''}. "
+                    "These will receive zero CDX carry adjustments."
+                )
+
         logger.info(
-            f"CdxComponent initialized: {len(self.cdx_spreads.columns)} instruments, "
-            f"tenor={tenor}"
+            f"CdxComponent: {len(self.cdx_spreads.columns)} instruments with CDX spreads, "
+            f"T+{settlement_days} settlement"
+            f"{f', target={len(self.target)} instruments' if self.target else ''}"
         )
-    
+
     def is_applicable(self, instrument: InstrumentProtocol) -> bool:
         """
-        Check if CDX carry applicable.
-        
+        Check applicability (domain logic only).
+
         Applicable if:
-        - Instrument type is CDX or CREDIT_INDEX
-        - Has spread data
+        - INDEX (credit index)
+        - Has CDX spread data
         """
-        if instrument.id not in self.cdx_spreads.columns:
+        if instrument.type != InstrumentType.INDEX:
             return False
-        
-        # Check instrument type
-        # Note: Adjust based on your InstrumentType enum
-        if hasattr(InstrumentType, 'CDX'):
-            return instrument.type == InstrumentType.CDX
-        
-        # Fallback: check if instrument has 'cdx' or 'credit' in type name
-        type_name = str(instrument.type).lower() if instrument.type else ''
-        return 'cdx' in type_name or 'credit' in type_name
-    
-    def calculate_batch(
+
+        return instrument.id in self.cdx_spreads.columns
+
+    def calculate_adjustment(
         self,
         instruments: dict[str, InstrumentProtocol],
         dates: Union[List[date], List[datetime]],
@@ -99,111 +101,78 @@ class CdxComponent(Component):
         fx_prices: pd.DataFrame,
     ) -> pd.DataFrame:
         """Calculate CDX carry adjustments."""
-        instrument_ids = list(instruments.keys())
-        result = pd.DataFrame(0.0, index=dates, columns=instrument_ids)
+        # 1. Normalize dates to datetime (MANDATORY)
+        dates_dt = self._normalize_dates(dates)
         
-        # Filter applicable
+        instrument_ids = list(instruments.keys())
+
+        # 2. Filter applicable (USE should_apply)
         applicable_ids = [
             inst.id for inst in instruments.values()
-            if self.is_applicable(inst) and inst.id in self.cdx_spreads.columns
+            if self.should_apply(inst) and inst.id in self.cdx_spreads.columns
         ]
-        
+
+        # 3. Early return if no applicable
         if not applicable_ids:
-            logger.debug("No applicable instruments for CdxComponent")
-            return result
-        
-        logger.debug(f"CdxComponent: {len(applicable_ids)}/{len(instruments)} instruments")
-        
-        # Calculate standard year fractions (no settlement shift for CDX)
-        year_fractions = calculate_year_fractions(
-            dates,
-            shifted=False,
-            settlement_days=0
-        )
-        
-        # Get spreads for applicable instruments
-        spreads_applicable = self.cdx_spreads[applicable_ids]
-        
-        # Align dates
-        common_dates = spreads_applicable.index.intersection(dates)
-        if len(common_dates) == 0:
-            logger.warning("No common dates between CDX spreads and requested dates")
-            return result
-        
-        # Calculate carry for each date
-        for calc_date in common_dates:
-            # Convert to date if datetime
-            date_obj = calc_date.date() if isinstance(calc_date, (datetime, pd.Timestamp)) else calc_date
-            
-            # Calculate time to maturity
-            time_to_maturity_days = self._get_time_to_maturity(date_obj)
-            
-            # Get spreads for this date
-            spreads_today = spreads_applicable.loc[calc_date]
-            
-            # Formula: carry = (spread / 10000) × (1 / ttm_days) × 365 × year_fraction
-            # Note: × 365 converts daily rate to annual, then × year_fraction scales to period
-            carry_rate = (spreads_today / 10000.0) * (1.0 / time_to_maturity_days) * 365.0
-            
-            # Apply year fraction
-            year_frac = year_fractions.loc[calc_date]
-            carry_today = carry_rate * year_frac
-            
-            # Fill result (positive = carry benefit)
-            result.loc[calc_date, applicable_ids] = carry_today
-        
-        return result
-    
-    def _get_time_to_maturity(self, current_date: date) -> int:
-        """
-        Calculate time to maturity for CDX.
-        
-        CDX rolls on March 20 and September 20.
-        For 5Y tenor: maturity is 5 years from last roll date.
-        
-        Args:
-            current_date: Current date
-        
-        Returns:
-            Days to maturity
-        """
-        year = current_date.year
-        march_20 = date(year, 3, 20)
-        sept_20 = date(year, 9, 20)
-        
-        # Determine creation (last roll) date
-        if current_date < march_20:
-            # Before March 20 → last roll was September 20 of previous year
-            creation_date = date(year - 1, 9, 20)
-        elif current_date < sept_20:
-            # Between March 20 and September 20 → last roll was March 20 this year
-            creation_date = march_20
-        else:
-            # After September 20 → last roll was September 20 this year
-            creation_date = sept_20
-        
-        # Maturity = creation_date + tenor_years
-        maturity_date = date(
-            creation_date.year + self.tenor_years,
-            creation_date.month,
-            creation_date.day
-        )
-        
-        # Time to maturity in days
-        ttm_days = (maturity_date - current_date).days
-        
-        # Ensure positive
-        if ttm_days <= 0:
-            logger.warning(
-                f"CDX time to maturity is {ttm_days} days for {current_date}. "
-                "Using 1 day minimum."
+            logger.debug(
+                f"CdxComponent: No applicable instruments. "
+                f"Total: {len(instruments)}"
+                f"{f', target filter: {len(self.target)}' if self.target else ''}"
             )
-            ttm_days = 1
-        
-        return ttm_days
-    
-    def __repr__(self) -> str:
-        return (
-            f"CdxComponent(instruments={len(self.cdx_spreads.columns)}, "
-            f"tenor={self.tenor})"
+            return pd.DataFrame(0.0, index=dates_dt, columns=instrument_ids)
+
+        # 4. Log processing
+        logger.info(
+            f"CdxComponent: Processing {len(applicable_ids)}/{len(instruments)} instruments"
         )
+
+        # 5. Calculate shifted year fractions
+        year_fractions_shifted = calculate_year_fractions(
+            dates_dt,
+            shifted=True,
+            settlement_days=self.settlement_days
+        )
+
+        # 6. Get CDX spreads for applicable instruments
+        cdx_applicable = self.cdx_spreads[applicable_ids]
+
+        # 7. Align dates
+        common_dates = cdx_applicable.index.intersection(dates_dt)
+        if len(common_dates) == 0:
+            logger.error(
+                f"CdxComponent: ZERO adjustments - no date overlap. "
+                f"CDX dates: {cdx_applicable.index.min()} to {cdx_applicable.index.max()}, "
+                f"Requested: {dates_dt[0]} to {dates_dt[-1]}. "
+                "Check data alignment."
+            )
+            return pd.DataFrame(0.0, index=dates_dt, columns=instrument_ids)
+
+        # 8. Vectorized calculation: spread × year_fraction_shifted
+        cdx_aligned = cdx_applicable.loc[common_dates]
+        year_frac_aligned = year_fractions_shifted.loc[common_dates]
+
+        # Multiply each column by year_fractions (positive carry for credit exposure)
+        result_applicable = cdx_aligned.mul(year_frac_aligned, axis=0)
+
+        # 9. Create full result DataFrame
+        result = pd.DataFrame(0.0, index=dates_dt, columns=instrument_ids)
+        result.loc[common_dates, applicable_ids] = result_applicable
+
+        # 10. Summary logging
+        non_zero = (result != 0).sum().sum()
+        if non_zero == 0:
+            logger.warning(
+                f"CdxComponent: Produced ZERO non-zero adjustments for "
+                f"{len(applicable_ids)} instruments. Verify CDX spread data."
+            )
+        else:
+            mean_adj = result[applicable_ids].mean().mean()
+            logger.debug(
+                f"CdxComponent: Generated {non_zero} non-zero adjustments, "
+                f"mean CDX carry impact: {mean_adj:.6f}"
+            )
+
+        return result
+
+    def __repr__(self) -> str:
+        return f"CdxComponent(instruments={len(self.cdx_spreads.columns)})"
