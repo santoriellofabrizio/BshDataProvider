@@ -439,8 +439,7 @@ class BloombergInfoMarketFetcher(BaseMarketFetcher):
             field_id = exc.getElementAsString("fieldId")
             err_msg = exc.getElement("errorInfo").getElementAsString("message")
             errors[f"{corr_id}:{field_id}"] = err_msg
-            logger.warning("Bloomberg field error for %s.%s: %s", 
-                         corr_id, field_id, err_msg)
+            logger.info("Bloomberg field error for %s.%s: %s", corr_id, field_id, err_msg)
 
     # ============================================================
     # PARSERS (identici a prima)
@@ -554,7 +553,7 @@ class BloombergInfoMarketFetcher(BaseMarketFetcher):
                 try:
                     record[name] = sub.getValue()
                 except Exception as e:
-                    logger.warning("Error getting value for %s: %s", name, e)
+                    logger.info("Error getting value for %s: %s", name, e)
         return record
 
     # ============================================================

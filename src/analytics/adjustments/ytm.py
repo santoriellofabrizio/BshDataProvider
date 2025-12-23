@@ -9,7 +9,7 @@ import pandas as pd
 import logging
 
 from analytics.adjustments.component import Component
-from analytics.adjustments.dates import calculate_year_fractions
+from analytics.adjustments.common import calculate_year_fractions
 from analytics.adjustments.protocols import InstrumentProtocol, EtfInstrumentProtocol
 from core.enums.instrument_types import InstrumentType
 
@@ -129,14 +129,12 @@ class YtmComponent(Component):
         instruments: dict[str, InstrumentProtocol],
         dates: Union[List[date], List[datetime]],
         prices: pd.DataFrame,
-        fx_prices: pd.DataFrame,
     ) -> pd.DataFrame:
         """Calculate YTM adjustments with vectorized operations."""
         # 1. Normalize dates to datetime (MANDATORY)
         dates_dt = self._normalize_dates(dates)
         
         instrument_ids = list(instruments.keys())
-        result = pd.DataFrame(0.0, index=dates_dt, columns=instrument_ids)
 
         # 2. Filter applicable (USE should_apply, NOT is_applicable)
         applicable_ids = [
@@ -151,7 +149,7 @@ class YtmComponent(Component):
                 f"Total: {len(instruments)}"
                 f"{f', target filter: {len(self.target)}' if self.target else ''}"
             )
-            return result
+            return pd.DataFrame(0.0, index=dates_dt, columns=instrument_ids)
 
         # 4. Log processing
         logger.info(
@@ -177,7 +175,7 @@ class YtmComponent(Component):
                 f"Requested: {dates_dt[0]} to {dates_dt[-1]}. "
                 "Check data alignment."
             )
-            return result
+            return pd.DataFrame(0.0, index=dates_dt, columns=instrument_ids)
 
         # 8. Vectorized calculation: -YTM × year_fraction_shifted
         ytm_aligned = ytm_applicable.loc[common_dates]
@@ -187,6 +185,7 @@ class YtmComponent(Component):
         result_applicable = -ytm_aligned.mul(fractions_aligned, axis=0)
 
         # Fill result
+        result = pd.DataFrame(0.0, index=dates_dt, columns=instrument_ids)
         result.loc[common_dates, applicable_ids] = result_applicable
 
         # 9. Summary logging

@@ -8,6 +8,7 @@ from typing import Union, List, Optional
 import pandas as pd
 import logging
 
+from analytics.adjustments.common import normalize_fx_columns
 from analytics.adjustments.component import Component
 from analytics.adjustments.protocols import InstrumentProtocol
 from core.enums.instrument_types import InstrumentType
@@ -42,7 +43,7 @@ class FxSpotComponent(Component):
     LOWER_SANITY_CHECK = -0.1  # Allow 10% negative for short positions
     UPPER_SANITY_CHECK = 1.1   # Allow 10% over for rounding/leverage
 
-    def __init__(self, fx_composition: pd.DataFrame, target: Optional[List[str]] = None):
+    def __init__(self, fx_composition: pd.DataFrame, fx_prices: pd.DataFrame, target: Optional[List[str]] = None):
         """
         Initialize FX Spot component.
 
@@ -56,8 +57,8 @@ class FxSpotComponent(Component):
 
         Example:
             #           USD   GBP   JPY   EUR
-            # IWDA LN  0.65  0.10  0.05   NaN
-            # VWRL LN  0.60  0.15   NaN  0.25
+            # IWDA LN 0.65  0.10  0.05   NaN
+            # VWRL LN 0.60  0.15   NaN  0.25
             
             # Apply to all instruments
             fx_comp = FxSpotComponent(fx_composition)
@@ -69,6 +70,7 @@ class FxSpotComponent(Component):
         
         # Fill NaN with 0 and validate currencies
         self.fx_composition = fx_composition.fillna(0.0).copy()
+        self.fx_prices = normalize_fx_columns(fx_prices)
 
         # Validate currency codes
         for ccy in self.fx_composition.columns:
@@ -132,12 +134,27 @@ class FxSpotComponent(Component):
 
         return True
 
+    def update_data(self, **kwargs) -> None:
+        """
+        Update FX prices for live mode.
+        
+        Args:
+            **kwargs: Must contain 'fx_prices' key with new FX price DataFrame
+        
+        Example:
+            component.update_data(fx_prices=new_fx_prices)
+        """
+        if 'fx_prices' in kwargs:
+            self.fx_prices = normalize_fx_columns(kwargs['fx_prices'])
+            logger.debug(
+                f"FxSpotComponent: Updated fx_prices to {len(self.fx_prices)} rows"
+            )
+
     def calculate_adjustment(
         self,
         instruments: dict[str, InstrumentProtocol],
         dates: Union[List[date], List[datetime]],
         prices: pd.DataFrame,
-        fx_prices: pd.DataFrame,
     ) -> pd.DataFrame:
         """
         Calculate FX spot adjustments using vectorized matrix operations.
@@ -169,8 +186,8 @@ class FxSpotComponent(Component):
             f"FxSpotComponent: Processing {len(applicable_ids)}/{len(instruments)} instruments"
         )
 
-        # 5. Calculate FX returns (dates × currencies)
-        fx_returns = fx_prices.pct_change().fillna(0.0)
+        # 5. Calculate FX returns (dates × currencies) - use self.fx_prices
+        fx_returns = self.fx_prices.pct_change().fillna(0.0)
 
         # Ensure dates alignment
         common_dates = fx_returns.index.intersection(dates_dt)

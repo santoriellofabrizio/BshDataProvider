@@ -153,7 +153,7 @@ class BloombergMarketMarketFetcher(BaseMarketFetcher):
     @cache_bsh_data
     def fetch_snapshot(self, request) -> dict:
         corr_id = request.instrument.id
-        interval_window = request.extra_params.get("interval_window_snapshot")
+        interval_window = request.extra_params.get("interval_window_snapshot", 15)
         results = {}
 
         logger.info("Fetching Bloomberg snapshot for %s (%s)", corr_id, request.fields)
@@ -192,8 +192,8 @@ class BloombergMarketMarketFetcher(BaseMarketFetcher):
             Dictionary mapping dates to field values: {date: value}
         """
         values: Dict[datetime.date, float] = {}
-        bin_interval = _parse_interval(request.extra_params.get("bin_interval"))
-        ohlc_field = request.extra_params.get("event")
+        bin_interval = _parse_interval(request.extra_params.get("bin_interval", 5))
+        ohlc_field = request.extra_params.get("event", "close")
         corr_id_base = request.instrument.id
 
         # Map correlation IDs to their corresponding days

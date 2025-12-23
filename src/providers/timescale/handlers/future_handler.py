@@ -15,7 +15,8 @@ class FutureHandler(Handler):
         market = first.market
         snapshot_time = first.snapshot_time
 
-        sec = _freq_to_seconds(first.frequency)
+        if not is_daily:
+             sec = _freq_to_seconds(first.frequency)
 
         subs = [
             r.subscription(first.start) if callable(r.subscription) else r.subscription

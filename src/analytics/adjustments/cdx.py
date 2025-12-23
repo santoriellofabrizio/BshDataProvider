@@ -9,7 +9,7 @@ import pandas as pd
 import logging
 
 from analytics.adjustments.component import Component
-from analytics.adjustments.dates import calculate_year_fractions
+from analytics.adjustments.common import calculate_year_fractions
 from analytics.adjustments.protocols import InstrumentProtocol
 from core.enums.instrument_types import InstrumentType
 
@@ -98,7 +98,6 @@ class CdxComponent(Component):
         instruments: dict[str, InstrumentProtocol],
         dates: Union[List[date], List[datetime]],
         prices: pd.DataFrame,
-        fx_prices: pd.DataFrame,
     ) -> pd.DataFrame:
         """Calculate CDX carry adjustments."""
         # 1. Normalize dates to datetime (MANDATORY)

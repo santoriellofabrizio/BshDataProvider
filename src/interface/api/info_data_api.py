@@ -211,6 +211,10 @@ class InfoDataAPI(BaseAPI):
     # ============================================================
     # MAIN ENTRY POINT
     # ============================================================
+    # ============================================================
+    # InfoDataAPI - get() con overload
+    # ============================================================
+
     @respect_cache_kwarg
     def get(
             self,
@@ -218,99 +222,80 @@ class InfoDataAPI(BaseAPI):
             id: Optional[Union[str, List[str]]] = None,
             isin: Optional[Union[str, List[str]]] = None,
             ticker: Optional[Union[str, List[str]]] = None,
+            instruments: Optional[List] = None,  # ← NEW
             market: Optional[Union[str, List[str]]] = None,
-            source: Optional[Union[str, List[str]]] = None,
-            fields: Union[str, List[str]] = "MID",
             currency: Union[str, List[str]] = "EUR",
-            subscriptions: Optional[Union[str, List[str], Dict[str, str]]] = None,
             autocomplete: Optional[bool] = None,
-            fallbacks: Optional[List[Dict[str, Any]]] = None,
-            **extra_params,
+            **params,
     ):
         """
-        Retrieve static or semi-static data for one or more instruments.
+        Retrieve static/semi-static data. Two modes:
 
-        This unified entry point constructs and dispatches static requests
-        (Reference, Bulk, or Historical) depending on parameters and data source.
-        It automatically normalizes inputs, builds the appropriate instrument objects,
-        and aggregates provider responses into a consistent format.
+        Mode 1 - Build instruments from identifiers:
+            get(type='ETP', ticker='IUSA', fields='TER', source='bloomberg')
 
-        Args:
-            type (str, optional): Instrument type (e.g., 'ETP', 'FUTURE', 'STOCK').
-            id (str | list[str] | None): Instrument identifiers (e.g., "IHYG", "RXZ4", "EURUSD").
-                If missing, it is inferred from `isin` or `ticker`.
-            isin (str | list[str] | None): Instrument ISIN code(s).
-            ticker (str | list[str] | None): Instrument ticker(s).
-            market (str | list[str], optional): Market(s) associated with the instruments (e.g., 'ETFP', 'EUREX').
-            source (str | list[str], optional): Data source(s) such as 'oracle', 'bloomberg', or 'timescale'.
-            fields (str | list[str]): Static fields to retrieve (e.g., 'TER', 'NAV', 'FX_COMPOSITION').
-            currency (str | list[str]): Instrument currency or list of currencies. Defaults to 'EUR'.
-            subscriptions (str | list[str] | dict[str, str], optional): Optional subscription identifiers.
-            autocomplete (bool, optional): Whether to auto-complete missing metadata
-                (e.g., infer ISIN from ticker using Oracle lookup).
-            fallbacks (list[dict], optional): Alternative configurations for automatic retry.
-                If the request fails or returns partial data, retry with each fallback config.
-                Each dict can override: 'source', 'market', 'type', or any other parameter.
-            **extra_params: Additional provider- or instrument-specific parameters
-                passed to the underlying request builder.
-
-        Returns:
-            dict | pd.DataFrame: Aggregated results per instrument, with standardized field names
-            (field renaming handled automatically via `StaticField` mapping).
-
-        Examples:
-            Basic usage:
-                >>> api.info.get()
-
-            With fallbacks (automatic retry):
-                >>> api.info.get()
-                # Tries bloomberg first. If TER or FX_COMPOSITION missing, retries with oracle.
-                # If still missing, retries with timescale.
-                # Returns merged results from all successful attempts.
+        Mode 2 - Use pre-built instruments:
+            get(instruments=[etf1, etf2], fields='TER', source='bloomberg')
         """
-        auto = self.autocomplete if autocomplete is None else autocomplete
+        # Mode 2: pre-built instruments
+        if instruments is not None:
+            return self.get_with_instruments(instruments=instruments, **params)
 
+        # Mode 1: build instruments
+        auto = self.autocomplete if autocomplete is None else autocomplete
         ids, isins, tickers = self._resolve_identifiers(id, isin, ticker, autocomplete=auto)
         n = len(ids)
 
-        # Normalize parameters
         currency = normalize_list(currency, n)
         market = normalize_list(market, n)
-        source = normalize_list(source, n)
         type = normalize_list(type, n)
+
+        # Separate instrument-building params from request params
+        instrument_build_params = {
+            k: v for k, v in params.items()
+            if k not in ['fields', 'source', 'subscriptions', 'request_type', 'fallbacks']
+        }
+
+        instruments = [
+            self._build_instrument(
+                id=ids[i], type=type[i], ticker=tickers[i], isin=isins[i],
+                currency=currency[i], market=market[i], autocomplete=auto,
+                **instrument_build_params
+            )
+            for i in range(n)
+        ]
+
+        return self.get_with_instruments(instruments=instruments, **params)
+
+    def get_with_instruments(
+            self,
+            instruments: list,
+            fields: Union[str, List[str]] = "MID",
+            source: Optional[Union[str, List[str]]] = None,
+            subscriptions: Optional[Union[str, List[str]]] = None,
+            market: Optional[Union[str, List[str]]] = None,
+            request_type: Optional[Union[str, List[str]]] = None,
+            fallbacks: Optional[List[Dict[str, Any]]] = None,
+            **extra_params,
+    ):
+        """Execute request with pre-built instruments."""
+        n = len(instruments)
+        source = normalize_list(source, n)
         subscriptions = normalize_list(subscriptions, n)
+        market = normalize_list(market, n)
+        request_type = normalize_list(request_type, n)
 
-        # Build instruments
-        if any(x is not None for x in ids + isins + tickers):
-            instruments = [
-                self._build_instrument(
-                    id=ids[i],
-                    type=type[i],
-                    ticker=tickers[i],
-                    isin=isins[i],
-                    currency=currency[i],
-                    market=market[i],
-                    autocomplete=auto,
-                    **extra_params
-                )
-                for i in range(n)
-            ]
-        else:
-            instruments = [None] * n
-
-        # Dispatch with fallback support
         result = self._dispatch(
             instruments=instruments,
             fields=fields,
             source=source,
             subscriptions=subscriptions,
             market=market,
-            type=type,
+            type=request_type,
             fallbacks=fallbacks,
             **extra_params,
         )
 
-        # Aggregate and rename fields
         result = self._aggregate(result)
         return self._rename_fields(result, fields if isinstance(fields, list) else [fields], source)
 
@@ -395,11 +380,10 @@ class InfoDataAPI(BaseAPI):
             start=today() - timedelta(days=360),
             end=today(),
             source="bloomberg",
-            type="ETP"
     ):
         """Restituisce i dividendi storici."""
         return self.get(
-            type=type,
+            type="ETP",
             id=id,
             isin=isin,
             ticker=ticker,
@@ -451,7 +435,7 @@ class InfoDataAPI(BaseAPI):
                 reference_date = HolidayManager().previous_business_day(today())
             elif ref == "last":
                 reference_date = None
-        
+
         if comp_field.upper() not in ["WEIGHT_NAV", "N_INSTRUMENTS", "WEIGHT_RISK", "RAW"]:
             raise ValueError("Invalid comp_field")
 
@@ -469,7 +453,7 @@ class InfoDataAPI(BaseAPI):
 
         if isinstance(isins, str):
             isins = [isins]
-        
+
         if comp_field.upper() == "RAW":
             return raw
         else:
@@ -549,7 +533,7 @@ class InfoDataAPI(BaseAPI):
     ):
         """
         Get future fields.
-        
+
         kwargs: root, is_active_form, future_currency, future_underlying,
                 suffix, timescale_root
         """

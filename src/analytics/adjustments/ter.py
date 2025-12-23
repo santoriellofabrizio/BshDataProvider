@@ -6,8 +6,9 @@ from typing import Literal, Union, List, Optional
 import pandas as pd
 import logging
 
+from analytics.adjustments.common import calculate_year_fractions
 from analytics.adjustments.component import Component
-from analytics.adjustments.dates import calculate_year_fractions
+
 from analytics.adjustments.protocols import InstrumentProtocol
 from core.enums.instrument_types import InstrumentType
 
@@ -52,6 +53,9 @@ class TerComponent(Component):
         
         # Parse settlement days
         self.settlement_days = int(shifted_settlement.replace("T+", ""))
+
+        if isinstance(ters, pd.DataFrame):
+            ters = ters.iloc[:, 0]
 
         # Convert Series to dict first
         if isinstance(ters, pd.Series):
@@ -102,43 +106,50 @@ class TerComponent(Component):
             instrument.id in self.ters
         )
 
-    def calculate_batch(
+    def calculate_adjustment(
         self,
         instruments: dict[str, InstrumentProtocol],
         dates: Union[List[date], List[datetime]],
         prices: pd.DataFrame,
-        fx_prices: pd.DataFrame,
     ) -> pd.DataFrame:
         """Calculate TER adjustments (vectorized with shifted year fractions)."""
-        result = pd.DataFrame(0.0, index=dates, columns=list(instruments.keys()))
+        # 1. Normalize dates to datetime (MANDATORY)
+        dates_dt = self._normalize_dates(dates)
+        
+        instrument_ids = list(instruments.keys())
 
-        # Calculate year fractions with settlement shift
-        year_fractions = calculate_year_fractions(
-            dates,
-            shifted=True,
-            settlement_days=self.settlement_days
-        )
+        # 2. Filter applicable (USE should_apply)
+        applicable = [i for i in instruments.values() if self.should_apply(i)]
 
-        # Filter applicable (use _should_apply to respect target filter)
-        applicable = [i for i in instruments.values() if self._should_apply(i)]
-
+        # 3. Early return if no applicable
         if not applicable:
             logger.debug(
                 f"TerComponent: No applicable instruments. "
-                f"Total instruments: {len(instruments)}"
+                f"Total: {len(instruments)}"
                 f"{f', target filter: {len(self.target)}' if self.target else ''}"
             )
-            return result
+            return pd.DataFrame(0.0, index=dates_dt, columns=instrument_ids)
 
+        # 4. Log processing
         logger.info(
             f"TerComponent: Processing {len(applicable)}/{len(instruments)} instruments"
         )
 
-        # Vectorized calculation
+        # 5. Calculate year fractions with settlement shift
+        year_fractions = calculate_year_fractions(
+            dates_dt,
+            shifted=True,
+            settlement_days=self.settlement_days
+        )
+
+        # 6. Create result DataFrame
+        result = pd.DataFrame(0.0, index=dates_dt, columns=instrument_ids)
+
+        # 7. Vectorized calculation
         for inst in applicable:
             result[inst.id] = -self.ters[inst.id] * year_fractions
         
-        # Summary logging
+        # 8. Summary logging
         non_zero = (result != 0).sum().sum()
         if non_zero == 0:
             logger.warning(
@@ -146,12 +157,13 @@ class TerComponent(Component):
                 f"{len(applicable)} instruments. Verify TER data."
             )
         else:
+            mean_adj = result[[i.id for i in applicable]].mean().mean()
             logger.debug(
                 f"TerComponent: Generated {non_zero} non-zero adjustments, "
-                f"mean TER impact: {result.mean().mean():.6f}"
+                f"mean TER impact: {mean_adj:.6f}"
             )
 
         return result
 
     def __repr__(self) -> str:
-        return f"TerComponent({len(self.ters)} instruments)"
+        return f"TerComponent(instruments={len(self.ters)})"

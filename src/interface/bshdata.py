@@ -52,7 +52,6 @@ class BshData:
                  log_file=None,
                  log_level_file: str = None,
                  autocomplete=None,
-                 warmup=None,
                  **kwargs) -> None:
 
         # Load config using ConfigManager (cached, validated)
@@ -64,7 +63,6 @@ class BshData:
             log_file=log_file,
             log_level_file=log_level_file,
             autocomplete=autocomplete,
-            warmup=warmup,
             cache=cache
         )
         

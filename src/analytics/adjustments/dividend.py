@@ -83,7 +83,6 @@ class DividendComponent(Component):
         instruments: dict[str, InstrumentProtocol],
         dates: Union[List[date], List[datetime]],
         prices: pd.DataFrame,
-        fx_prices: pd.DataFrame,
     ) -> pd.DataFrame:
         """
         Calculate dividend adjustments.

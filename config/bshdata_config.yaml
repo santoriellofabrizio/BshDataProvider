@@ -15,8 +15,8 @@
 
 client:
   activate_oracle: True
-  activate_timescale: False
-  activate_bloomberg: False
+  activate_timescale: True
+  activate_bloomberg: True
 
 api:
   log_level: INFO

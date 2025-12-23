@@ -304,7 +304,7 @@ class BaseAPI:
             if isinstance(val, dict):
                 if val and all(is_date_key(k) for k in val.keys()):
                     # Serie temporale: Series con index=date, name=field
-                    s = pd.Series(val, name=field)
+                    s = pd.Series(val, name=instr)
                     s = normalize_date_index(s)  # ✅ FIX: normalizza indice
                     s.index.name = "date"
                     return s

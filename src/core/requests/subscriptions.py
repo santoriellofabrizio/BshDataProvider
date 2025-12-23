@@ -242,7 +242,7 @@ class BloombergSubscriptionBuilder(BaseSubscriptionBuilder):
             # DEFAULT
             # ============================================================
             case _:
-                raise ValueError(f"Unsupported type {itype} for subscription build.")
+                return inst.id
 
 
 # ============================================================

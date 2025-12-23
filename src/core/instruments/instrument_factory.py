@@ -309,13 +309,7 @@ class InstrumentFactory(Singleton):
         return cls(
             id=id_,
             name=ticker,
-            tenor=tenor,
-            compounding=comp,
             currency=ccy,
-            day_count=dcount,
-            business_day_convention=bdc,
-            eom=eom,
-            family=family,
         )
 
     # ==================================================================

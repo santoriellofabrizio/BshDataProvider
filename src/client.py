@@ -44,7 +44,7 @@ class BSHDataClient(Singleton):
             ),
             DataSource.BLOOMBERG.value: (
                 "bloomberg",
-                lambda: BloombergProvider(show_progress=show_progress)
+                lambda: BloombergProvider()
             ),
             DataSource.ORACLE.value: (
                 "oracle",

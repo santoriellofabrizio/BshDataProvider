@@ -205,17 +205,19 @@ class MarketDataAPI(BaseAPI):
         return merged_result
 
     # ============================================================
-    # GENERIC GET
+    # MarketDataAPI - get() con overload
     # ============================================================
+
     @respect_cache_kwarg
     def get(
             self,
-            type: str,
-            start: Optional[Union[str, dt.date, datetime]],
-            end: Optional[Union[str, dt.date, datetime]],
+            type: str = None,
+            start: Optional[Union[str, dt.date, datetime]] = None,
+            end: Optional[Union[str, dt.date, datetime]] = None,
             id: Optional[Union[str, List[str]]] = None,
             isin: Optional[Union[str, List[str]]] = None,
             ticker: Optional[Union[str, List[str]]] = None,
+            instruments: Optional[List] = None,  # ← NEW
             market: Optional[Union[str, List[str]]] = None,
             source: Optional[Union[str, List[str]]] = None,
             frequency: Optional[str] = "1d",
@@ -228,64 +230,45 @@ class MarketDataAPI(BaseAPI):
             **extra_params,
     ):
         """
-        Retrieve market time-series (historical or intraday) for ETFs, futures, FX, or equities.
+        Retrieve market time-series. Two modes:
 
-        Args:
-            type (str): Instrument type (e.g., 'ETP', 'FUTURE', 'CURRENCYPAIR').
-            start (str | date | datetime): Start date/datetime for the query.
-            end (str | date | datetime): End date/datetime for the query.
-            id (str | list[str], optional): Instrument identifiers (e.g., "IHYG", "RXZ4", "EURUSD").
-                If missing, inferred from `isin` or `ticker`.
-            isin (str | list[str], optional): Instrument ISIN code(s).
-            ticker (str | list[str], optional): Instrument ticker(s).
-            market (str | list[str], optional): Market name(s) (e.g., 'ETFP', 'EUREX').
-            source (str | list[str], optional): Data source(s) ('timescale', 'bloomberg', 'oracle').
-            frequency (str): Data frequency. '1d' for daily, '1m'/'5m'/etc for intraday.
-            fields (str | list[str]): Requested data fields (e.g., 'MID', 'VOLUME', 'BID', 'ASK').
-            currency (str | list[str]): Instrument currency (default 'EUR').
-            snapshot_time (str | time, optional): Time for daily snapshot filtering (e.g., '17:00').
-            subscription (str | list[str] | dict, optional): Subscription identifier(s).
-            autocomplete (bool, optional): Auto-complete missing instrument metadata.
-            fallbacks (list[dict], optional): Alternative configurations for automatic retry.
-                If the request fails or returns partial data, retry with each fallback config.
-                Each dict can override: 'source', 'market', 'currency', or any other parameter.
-            **extra_params: Additional provider or instrument parameters.
+        Mode 1 - Build instruments from identifiers:
+            get(type='ETP', ticker='IUSA', start='2024-01-01', end='2024-12-31')
 
-        Returns:
-            pd.DataFrame | pd.Series | dict | None: Aggregated results from provider(s).
-
-        Examples:
-            Basic usage:
-                >>> api.market.get()
-
-            With fallbacks (automatic retry):
-                >>> api.market.get()
-                # Tries bloomberg first. If MID or VOLUME missing, retries with oracle.
-                # If still missing, retries with timescale + XETRA market.
-                # Returns merged results from all successful attempts.
+        Mode 2 - Use pre-built instruments:
+            get(instruments=[etf1, etf2], start='2024-01-01', end='2024-12-31')
         """
+        # Mode 2: pre-built instruments
+        if instruments is not None:
+            return self.get_with_instruments(
+                instruments=instruments,
+                fields=fields,
+                source=source,
+                subscription=subscription,
+                market=market,
+                frequency=frequency,
+                snapshot_time=snapshot_time,
+                start=start,
+                end=end,
+                fallbacks=fallbacks,
+                **extra_params
+            )
+
+        # Mode 1: build instruments
         auto = self.autocomplete if autocomplete is None else autocomplete
-
-        if frequency.lower() in ["1d", "daily", "weekly"]:
-            start = self._parse_date(start)
-            end = self._parse_date(end)
-        else:
-            start = self._parse_datetime(start)
-            end = self._parse_datetime(end)
-
-        snapshot_time = self._parse_time(snapshot_time)
         ids, isins, tickers = self._resolve_identifiers(id, isin, ticker, autocomplete=auto)
         n = len(ids)
 
         currency = normalize_list(currency, n)
         market = normalize_list(market, n)
-        source = normalize_list(source, n)
         type_ = normalize_list(type, n)
-        subscription = normalize_list(subscription, n)
-        if not isinstance(fields, list):
-            fields = [fields]
-        fields = [f.upper() for f in fields]
-        request_type = extra_params.pop("request_type", None)
+
+        # Separate instrument-building params from request params
+        instrument_build_params = {
+            k: v for k, v in extra_params.items()
+            if k not in ['fields', 'source', 'subscription', 'frequency',
+                         'snapshot_time', 'start', 'end', 'fallbacks', 'request_type']
+        }
 
         instruments = [
             self._build_instrument(
@@ -296,11 +279,60 @@ class MarketDataAPI(BaseAPI):
                 currency=currency[i],
                 market=market[i],
                 autocomplete=auto,
-                **extra_params,
+                **instrument_build_params,
             )
             for i in range(n)
         ]
 
+        return self.get_with_instruments(
+            instruments=instruments,
+            fields=fields,
+            source=source,
+            subscription=subscription,
+            market=market,
+            frequency=frequency,
+            snapshot_time=snapshot_time,
+            start=start,
+            end=end,
+            fallbacks=fallbacks,
+            **extra_params
+        )
+
+    def get_with_instruments(
+            self,
+            instruments: List,
+            fields: List[str],
+            source: List,
+            subscription: List,
+            market: List,
+            frequency: str,
+            snapshot_time: Optional[time],
+            start: Union[dt.date, datetime],
+            end: Union[dt.date, datetime],
+            fallbacks: Optional[List[Dict[str, Any]]],
+            **extra_params,
+    ):
+
+        if not isinstance(fields, list):
+            fields = [fields]
+        fields = [f.upper() for f in fields]
+        request_type = extra_params.pop("request_type", None)
+        n = len(instruments)
+        subscription = normalize_list(subscription, n)
+        source = normalize_list(source, n)
+
+        request_type = extra_params.pop("request_type", None)
+
+        if frequency.lower() in ["1d", "daily", "weekly"]:
+            start = self._parse_date(start)
+            end = self._parse_date(end)
+        else:
+            start = self._parse_datetime(start)
+            end = self._parse_datetime(end)
+
+        snapshot_time = self._parse_time(snapshot_time)
+
+        """Access point per chiamate con instruments già creati."""
         dispatch_params = dict(
             instruments=instruments,
             fields=fields,
@@ -314,13 +346,42 @@ class MarketDataAPI(BaseAPI):
             request_type=request_type,
             **extra_params,
         )
-
         result = self._dispatch(**dispatch_params, fallbacks=fallbacks)
         return self._aggregate(result)
 
+    def get_fx_forward_prices(self,
+                              quoted_currency: list[str] | str,
+                              start,
+                              base_currency: list[str] | str = "EUR",
+                              tenor: int | str = "1M",
+                              end: str | datetime = today(),
+                              snapshot_time: time | str = time(17)):
 
-    # WRAPPER METHODS
-    # ============================================================
+        if isinstance(quoted_currency, str):
+            quoted_currency = [quoted_currency]
+        if isinstance(base_currency, str):
+            base_currency = [base_currency]
+        n = len(quoted_currency)
+        quoted_currency = normalize_list(quoted_currency, n)
+        base_currency = normalize_list(base_currency, n)
+
+        for b,q in zip(base_currency, quoted_currency):
+            if b == q: base_currency.remove(b); quoted_currency.remove(q)
+
+        ids = [f"{b}{q} {tenor}" for b, q in zip(base_currency, quoted_currency)]
+        quoted_currency = {id: q for id, q in zip(ids, quoted_currency)}
+        base_currency = {id: b for id, b in zip(ids, base_currency)}
+        return self.get(type=InstrumentType.FXFWD,
+                        id=ids,
+                        base_currency=base_currency,
+                        quoted_currency=quoted_currency,
+                        start=start,
+                        frequency="1d",
+                        source="bloomberg",
+                        end=end,
+                        tenor=tenor,
+                        snapshot_time=snapshot_time)
+
     def get_intraday(
             self,
             date: Union[dt.date, str],
@@ -803,3 +864,79 @@ class MarketDataAPI(BaseAPI):
             subscriptions=subscriptions,
             **extra_params,
         )
+
+    # In MarketDataAPI, aggiungi:
+
+    def get_daily_repo_rates(
+            self,
+            start: Union[dt.date, str],
+            end: Union[dt.date, str] = today(),
+            currencies: Optional[Union[str, List[str]]] = None,
+            tenor: Optional[Union[str, List[str]]] = None,
+            ticker: Optional[Union[str, List[str]]] = None,
+            source: str = "bloomberg",
+            **extra_params,
+    ) -> pd.DataFrame:
+
+        """Get daily repo rates. currencies=['EUR','USD'], tenor=None(overnight) or '1M'/'3M'/etc."""
+        OVERNIGHT = {'EUR': 'ESTRON INDEX', 'USD': 'SOFRRATE INDEX', 'GBP': 'SONIA INDEX', 'JPY': 'TONAR INDEX',
+                     'CHF': 'SARON INDEX'}
+
+        if currencies:
+            currencies = [currencies] if isinstance(currencies, str) else currencies
+            n = len(currencies)
+            tenor = [tenor] * n if isinstance(tenor, str) or tenor is None else tenor
+            ticker = [OVERNIGHT[c] for c in currencies]  # Overnight only for now
+            ccy_map = {ticker[i]: currencies[i] for i in range(n)}
+            extra_params['tenor'] = tenor
+        else:
+            ccy_map = None
+
+        result = self.get(type=InstrumentType.INDEX, ticker=ticker, start=start, end=end,
+                          fields="PX_LAST", source=source, frequency="1d", request_type="historical", **extra_params)
+
+        if isinstance(result, pd.DataFrame):
+            result = result / 100.0  # % → decimal
+            if ccy_map:
+                result = result.rename(columns={t: c for t, c in ccy_map.items() if
+                                                any(t.replace(' INDEX', '') in str(col) for col in result.columns)})
+        return result
+
+    def get_daily_fx_forward(self, start: Union[dt.date, str],
+                             end: Union[dt.date, str] = today(),
+                             id: Optional[Union[str, List[str]]] = None,
+                             base_currency: Optional[Union[str, List[str]]] = "EUR",
+                             quoted_currency: Optional[Union[str, List[str]]] = None,
+                             fields: Union[str, List[str]] = "MID",
+                             source: str = "bloomberg",
+                             tenor: Optional[Union[str, List[str]]] = "1M",
+                             **extra_params):
+
+        if not id and not quoted_currency:
+            raise ValueError("Either ticker or quote_currency must be specified (base currency assumed to be EUR)")
+
+        if isinstance(base_currency, str):  base_currency = [base_currency]
+        if isinstance(quoted_currency, str): quoted_currency = quoted_currency
+
+        base_currency = normalize_list(base_currency, len(quoted_currency))
+        for b, q in zip(base_currency, quoted_currency):
+            if b == q: base_currency.remove(b); quoted_currency.remove(q);
+
+        if not id:
+            id = [f"{b}{q} {tenor}" for b,q in zip(base_currency, quoted_currency)]
+
+        quoted_currency = {i: q for i, q in zip(id, quoted_currency)}
+        base_currency = {i: b for i, b in zip(id, base_currency)}
+
+        return self.get(type=InstrumentType.FXFWD,
+                        id=id,
+                        start=start,
+                        end=end,
+                        base_currency=base_currency,
+                        quoted_currency=quoted_currency,
+                        fields=fields,
+                        source=source,
+                        frequency="1d",
+                        request_type="historical",
+                        tenor=tenor,
+                        **extra_params)

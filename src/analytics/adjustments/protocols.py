@@ -58,7 +58,7 @@ class ComponentProtocol(Protocol):
         """Check if component applies to instrument"""
         ...
     
-    def calculate_batch(
+    def calculate_adjustment(
         self,
         instrument_ids: list[str],
         instruments: dict[str, InstrumentProtocol],
@@ -73,3 +73,11 @@ class ComponentProtocol(Protocol):
             DataFrame(dates × instruments)
         """
         ...
+
+    # In protocols.py
+    class UpdatableComponent(Protocol):
+        """Component that can receive live data updates"""
+
+        def update_data(self, **kwargs) -> None:
+            """Update component data with new live values"""
+            ...
