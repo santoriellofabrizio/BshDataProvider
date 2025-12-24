@@ -11,6 +11,7 @@ from core.utils.config_manager import ConfigManager
 from core.utils.singleton import Singleton
 
 from providers.bloomberg.bloomberg import BloombergProvider
+from providers.lazy_provider_proxy import LazyProviderProxy
 from providers.oracle.provider import OracleProvider
 from providers.timescale.provider import TimescaleProvider
 
@@ -67,19 +68,17 @@ class BSHDataClient(Singleton):
 
     @staticmethod
     def _init_lazy_provider(key: str, factory, client_config):
-        """Inizializzazione lazy: torna None se disattivato."""
-        # Support both dict (backward compat) and ClientConfig object
+        """Inizializzazione lazy: ritorna None se disattivato."""
+        activate_key = f"activate_{key}"
+
         if isinstance(client_config, dict):
-            activate_key = f"activate_{key}"
             if not client_config.get(activate_key, True):
                 return None
         else:
-            # ClientConfig dataclass
-            activate_key = f"activate_{key}"
             if not getattr(client_config, activate_key, True):
                 return None
-        return factory()
 
+        return LazyProviderProxy(factory)
 
     @property
     def tracker(self) -> RequestTracker:
@@ -120,7 +119,8 @@ class BSHDataClient(Singleton):
         self._update_tracking(results)
         return results
 
-    def _dispatch(self, provider: BaseProvider, batch: List[BaseRequest]):
+    @staticmethod
+    def _dispatch(provider: BaseProvider, batch: List[BaseRequest]):
         """Dispatch al metodo corretto del provider."""
         if isinstance(batch[0], BaseMarketRequest):
             return provider.fetch_market_data(batch)
@@ -143,7 +143,8 @@ class BSHDataClient(Singleton):
 
             self._tracker.update_with_result(req.request_id, result_data)
 
-    def _get_instrument_id(self, req: BaseRequest) -> str:
+    @staticmethod
+    def _get_instrument_id(req: BaseRequest) -> str:
         """Estrae instrument ID dalla request."""
         if isinstance(req, BaseMarketRequest):
             return req.instrument.id
@@ -160,9 +161,3 @@ class BSHDataClient(Singleton):
         return provider
 
 
-def safe_init(provider_cls, *args, **kwargs):
-    try:
-        return provider_cls(*args, **kwargs)
-    except Exception as e:
-        logging.error(f"Failed to initialize {provider_cls.__name__}: {e}", exc_info=True)
-        return None

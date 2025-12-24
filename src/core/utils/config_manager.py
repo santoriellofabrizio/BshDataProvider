@@ -12,6 +12,7 @@ from typing import Optional, Dict, Any
 from dataclasses import dataclass, field
 from functools import lru_cache
 
+from dotenv import find_dotenv
 from ruamel.yaml import YAML
 
 logger = logging.getLogger(__name__)
@@ -152,6 +153,9 @@ class ConfigManager:
                 Path.cwd() / Path(".env"),
                 Path.cwd() / Path("config/.env"),
                 Path.cwd() / ".bshdata" / ".env",
+                Path.cwd().parent / Path(".env"),
+                Path.cwd().parent.parent / Path(".env"),
+                Path.cwd().parent.parent / Path(".env"),
             ]
             for env_path in env_paths:
                 if env_path.exists():

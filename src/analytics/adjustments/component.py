@@ -44,13 +44,25 @@ class Component(ABC):
     def __init__(self, target: Optional[List[str]] = None):
         """
         Initialize component.
-        
+
         Args:
             target: Optional list of instrument IDs to restrict adjustments.
                    If None, applies to all applicable instruments.
         """
         self.target = set(target) if target is not None else None
         self._children: List['Component'] = []  # For builder pattern
+
+    def is_updatable(self) -> bool:
+        """
+        Check if this component can receive data updates.
+
+        Returns:
+            True if component supports updates (has updatable_fields property)
+
+        Note:
+            Default is False. Override to return True in updatable components.
+        """
+        return False
 
     @abstractmethod
     def is_applicable(self, instrument: InstrumentProtocol) -> bool:
@@ -95,6 +107,46 @@ class Component(ABC):
         
         # Check if in target set
         return instrument.id in self.target
+
+    def validate_input(self, instruments: dict[str, InstrumentProtocol], dates: Union[List[date], List[datetime]], prices: pd.DataFrame) -> None:
+        """
+        Validate input data, raise ValueError if invalid.
+
+        Default implementation validates basic requirements.
+        Override for component-specific validation.
+
+        Args:
+            instruments: Dict[instrument_id -> Instrument object]
+            dates: List of dates
+            prices: DataFrame(dates x instruments)
+
+        Raises:
+            ValueError: If validation fails
+        """
+        if not instruments:
+            raise ValueError("instruments cannot be empty")
+        if not dates:
+            raise ValueError("dates cannot be empty")
+        if prices.empty:
+            raise ValueError("prices cannot be empty")
+
+    def validate_output(self, result: pd.DataFrame) -> None:
+        """
+        Validate output data, raise ValueError if invalid.
+
+        Default implementation checks for basic sanity.
+        Override for component-specific validation.
+
+        Args:
+            result: DataFrame with calculated adjustments
+
+        Raises:
+            ValueError: If validation fails
+        """
+        if result.empty:
+            raise ValueError("Result DataFrame is empty")
+        if result.isna().all().all():
+            raise ValueError("Result contains only NaN values")
 
     @abstractmethod
     def calculate_adjustment(
@@ -156,27 +208,6 @@ class Component(ABC):
         logger.debug(f"{self.__class__.__name__}.add({component.__class__.__name__})")
         return self  # Return parent for chaining
 
-    def get_chain(self) -> List['Component']:
-        """
-        Get flattened list of all components in chain.
-        
-        Recursively collects self + all children + their children.
-        
-        Returns:
-            List of all components in the chain
-        
-        Example:
-            # After: ter.add(fx).add(div)
-            chain = ter.get_chain()
-            # Returns: [ter, fx, div]
-        """
-        result = [self]  # Start with self
-        
-        # Recursively add all children
-        for child in self._children:
-            result.extend(child.get_chain())
-        
-        return result
 
     # ========================================================================
     # UTILITY METHODS
@@ -221,23 +252,38 @@ class Component(ABC):
         
         return normalized
 
-    def update_data(self, **kwargs) -> None:
+    def update(self, append: bool = False, **kwargs) -> None:
         """
-        Update component data for live mode.
-        
+        Update component with new data.
+
         Base implementation: no-op (components are stateless by default).
-        Override in subclasses that store mutable data (e.g., prices, fx_prices).
-        
+        Override in updatable components with explicit parameters.
+
         Args:
-            **kwargs: Component-specific data to update
-        
+            append: If True, append to existing data (permanent).
+                   If False, use temporarily for next calculation only.
+            **kwargs: Component-specific data (for compatibility)
+
         Example:
-            # In FxSpotComponent
-            def update_data(self, **kwargs):
-                if 'fx_prices' in kwargs:
-                    self.fx_prices = kwargs['fx_prices']
+            # In FxSpotComponent - explicit signature
+            def update(self, append: bool = False, *, fx_prices: Optional[pd.DataFrame] = None):
+                if fx_prices is not None:
+                    # validate and update
         """
         pass
+
+    @property
+    def updatable_fields(self) -> set[str]:
+        """
+        Declare updatable fields (subscription model).
+
+        Base implementation returns empty set (not updatable).
+        Override in updatable components.
+
+        Returns:
+            Set of field names this component can update
+        """
+        return set()
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}()"

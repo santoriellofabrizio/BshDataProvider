@@ -226,7 +226,7 @@ class InfoDataAPI(BaseAPI):
             market: Optional[Union[str, List[str]]] = None,
             currency: Union[str, List[str]] = "EUR",
             autocomplete: Optional[bool] = None,
-            **params,
+            **kwargs,
     ):
         """
         Retrieve static/semi-static data. Two modes:
@@ -239,7 +239,7 @@ class InfoDataAPI(BaseAPI):
         """
         # Mode 2: pre-built instruments
         if instruments is not None:
-            return self.get_with_instruments(instruments=instruments, **params)
+            return self.get_with_instruments(instruments=instruments, **kwargs)
 
         # Mode 1: build instruments
         auto = self.autocomplete if autocomplete is None else autocomplete
@@ -252,7 +252,7 @@ class InfoDataAPI(BaseAPI):
 
         # Separate instrument-building params from request params
         instrument_build_params = {
-            k: v for k, v in params.items()
+            k: v for k, v in kwargs.items()
             if k not in ['fields', 'source', 'subscriptions', 'request_type', 'fallbacks']
         }
 
@@ -265,7 +265,7 @@ class InfoDataAPI(BaseAPI):
             for i in range(n)
         ]
 
-        return self.get_with_instruments(instruments=instruments, **params)
+        return self.get_with_instruments(instruments=instruments, **kwargs)
 
     def get_with_instruments(
             self,
@@ -480,16 +480,16 @@ class InfoDataAPI(BaseAPI):
     ):
         """Get ETP fields."""
         return self.get(
-            type,
-            id,
-            isin,
-            ticker,
-            market,
-            source,
-            fields,
-            currency,
-            subscriptions,
-            autocomplete,
+            type=type,
+            id=id,
+            isin=isin,
+            ticker=ticker,
+            market=market,
+            source=source,
+            fields=fields,
+            currency=currency,
+            subscriptions=subscriptions,
+            autocomplete=autocomplete,
             **extra_params
         )
 

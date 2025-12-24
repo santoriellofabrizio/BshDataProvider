@@ -26,7 +26,7 @@ class DividendComponent(Component):
     - Uses last cum-dividend price before midnight for normalization
     """
 
-    def __init__(self, dividends: pd.DataFrame, target: Optional[List[str]] = None):
+    def __init__(self, dividends: pd.DataFrame, fx_prices: pd.DataFrame, target: Optional[List[str]] = None):
         """
         Args:
             dividends: DataFrame(dates × instruments) with dividend amounts
@@ -42,7 +42,8 @@ class DividendComponent(Component):
             div_comp = DividendComponent(dividends, target=['STOCK_A', 'ETF_B'])
         """
         super().__init__(target)
-        
+
+        self.fx_prices = fx_prices
         self.dividends_raw = dividends.fillna(0.0)
         
         # Validate target compatibility
@@ -63,7 +64,6 @@ class DividendComponent(Component):
         )
 
     def is_applicable(self, instrument: InstrumentProtocol) -> bool:
-        """Check if applicable (STOCK or ETP with DIST/INC policy)."""
         if instrument.id not in self.dividends_raw.columns:
             return False
 
@@ -71,10 +71,10 @@ class DividendComponent(Component):
             return True
 
         if instrument.type == InstrumentType.ETP:
-            if isinstance(instrument, EtfInstrumentProtocol):
-                policy = instrument.payment_policy
-                return policy is None or policy in ['DIST', 'INC']
-            return True
+            return not isinstance(instrument, EtfInstrumentProtocol) or (
+                    instrument.payment_policy is None
+                    or instrument.payment_policy in {"DIST", "INC"}
+            )
 
         return False
 
@@ -92,7 +92,6 @@ class DividendComponent(Component):
         """
         # 1. Normalize dates to datetime (MANDATORY)
         dates_dt = self._normalize_dates(dates)
-        
         result = pd.DataFrame(0.0, index=dates_dt, columns=list(instruments.keys()))
 
         # 2. Filter applicable (USE should_apply)
@@ -117,10 +116,10 @@ class DividendComponent(Component):
         
         if is_intraday:
             logger.debug("DividendComponent: Using intraday mode (period returns)")
-            result = self._calculate_intraday(instruments, applicable, dates_dt, prices, fx_prices)
+            result = self._calculate_intraday(instruments, applicable, dates_dt, prices, self.fx_prices)
         else:
             logger.debug("DividendComponent: Using daily mode")
-            result = self._calculate_daily(instruments, applicable, dates_dt, prices, fx_prices)
+            result = self._calculate_daily(instruments, applicable, dates_dt, prices, self.fx_prices)
         
         # 6. Summary logging
         non_zero = (result != 0).sum().sum()
@@ -325,7 +324,7 @@ class DividendComponent(Component):
             if pd.isna(price) or price <= 0:
                 continue
 
-            # Convert to EUR (EXPLICIT None checks!)
+            # Convert to EUR
             div_eur = self._convert_to_eur(div_amt, fund_ccy, d_dt, fx_prices)
             price_eur = self._convert_to_eur(price, trading_ccy, d_dt, fx_prices)
 

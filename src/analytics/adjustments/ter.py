@@ -113,7 +113,10 @@ class TerComponent(Component):
         prices: pd.DataFrame,
     ) -> pd.DataFrame:
         """Calculate TER adjustments (vectorized with shifted year fractions)."""
-        # 1. Normalize dates to datetime (MANDATORY)
+        # 1. Validate input
+        self.validate_input(instruments, dates, prices)
+
+        # 2. Normalize dates to datetime (MANDATORY)
         dates_dt = self._normalize_dates(dates)
         
         instrument_ids = list(instruments.keys())
@@ -162,6 +165,9 @@ class TerComponent(Component):
                 f"TerComponent: Generated {non_zero} non-zero adjustments, "
                 f"mean TER impact: {mean_adj:.6f}"
             )
+
+        # 9. Validate output
+        self.validate_output(result)
 
         return result
 

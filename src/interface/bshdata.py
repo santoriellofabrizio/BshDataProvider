@@ -51,7 +51,7 @@ class BshData:
                  log_level=None,
                  log_file=None,
                  log_level_file: str = None,
-                 autocomplete=None,
+                 autocomplete=True,
                  **kwargs) -> None:
 
         # Load config using ConfigManager (cached, validated)
