@@ -36,10 +36,10 @@ class DividendComponent(Component):
         
         Example:
             # Apply to all instruments with dividend data
-            div_comp = DividendComponent(dividends)
+            div_comp = DividendComponent(dividends2.csv)
             
             # Apply only to specific stocks/ETFs
-            div_comp = DividendComponent(dividends, target=['STOCK_A', 'ETF_B'])
+            div_comp = DividendComponent(dividends2.csv, target=['STOCK_A', 'ETF_B'])
         """
         super().__init__(target)
 
@@ -126,7 +126,7 @@ class DividendComponent(Component):
         if non_zero == 0:
             logger.debug(
                 f"DividendComponent: ZERO non-zero adjustments for "
-                f"{len(applicable)} instruments (expected if no dividends in period)"
+                f"{len(applicable)} instruments (expected if no dividends2.csv in period)"
             )
         else:
             mean_adj = result[result != 0].mean().mean()
@@ -195,19 +195,27 @@ class DividendComponent(Component):
             
             # For each dividend event
             for div_date in div_dates:
-                div_date_only = pd.Timestamp(div_date).date()
+                # Convert to proper timestamp with timezone awareness
+                div_timestamp = pd.Timestamp(div_date)
+                if hasattr(prices.index, 'tz') and prices.index.tz is not None:
+                    # Preserve timezone from prices.index
+                    if div_timestamp.tz is None:
+                        div_timestamp = div_timestamp.tz_localize(prices.index.tz)
+                    else:
+                        div_timestamp = div_timestamp.tz_convert(prices.index.tz)
+
+                div_date_only = div_timestamp.date()
                 div_amt = divs.loc[div_date]
-                
+
                 if pd.isna(div_amt) or div_amt == 0:
                     continue
-                
-                # Find LAST available price timestamp BEFORE div_date_only midnight
-                div_midnight = pd.Timestamp(div_date_only)
-                
+
+                # For intraday data: use the actual dividend timestamp
+                # For daily data: use midnight of the dividend date
                 # Get all timestamps before the dividend
                 price_timestamps_before = [
-                    ts for ts in prices.index 
-                    if ts < div_midnight and inst_id in prices.columns
+                    ts for ts in prices.index
+                    if ts < div_timestamp and inst_id in prices.columns
                 ]
                 
                 if len(price_timestamps_before) == 0:
@@ -248,24 +256,25 @@ class DividendComponent(Component):
                 
                 # Calculate adjustment
                 adjustment = div_eur / price_eur
-                
-                # Find the period that crosses this dividend date
+
+                # Find the period that crosses this dividend timestamp (for intraday data)
                 for i in range(1, len(dates_dt)):
                     t1 = dates_dt[i - 1]
                     t2 = dates_dt[i]
-                    
-                    date_t1 = t1.date()
-                    date_t2 = t2.date()
-                    
-                    # Dividend applies if period crosses the dividend date
-                    if date_t1 < div_date_only <= date_t2:
+
+                    # Convert to timestamps for comparison (handle both tz-aware and naive)
+                    t1_ts = pd.Timestamp(t1)
+                    t2_ts = pd.Timestamp(t2)
+
+                    # Dividend applies if period crosses the dividend timestamp
+                    if t1_ts < div_timestamp <= t2_ts:
                         result.loc[t2, inst_id] += adjustment
-                        
+
                         logger.debug(
                             f"DividendComponent: {inst_id}: Applied adjustment at {t2}: "
                             f"+{adjustment:.6f} (period {t1} → {t2})"
                         )
-                        
+
                         break  # Only apply to first crossing period
         
         return result
@@ -293,7 +302,7 @@ class DividendComponent(Component):
         prices: pd.DataFrame, 
         fx_prices: pd.DataFrame
     ) -> pd.Series:
-        """Normalize dividends for single instrument (daily mode)."""
+        """Normalize dividends2.csv for single instrument (daily mode)."""
         normalized = pd.Series(0.0, index=dates_dt)
 
         divs = self.dividends_raw[inst.id]
@@ -308,7 +317,15 @@ class DividendComponent(Component):
 
         for d in div_dates:
             # Find matching datetime in dates_dt
+            # Preserve timezone if prices.index is timezone-aware
             d_dt = pd.Timestamp(d)
+            if hasattr(prices.index, 'tz') and prices.index.tz is not None:
+                # If d_dt is naive, localize it; if already tz-aware, convert to target tz
+                if d_dt.tz is None:
+                    d_dt = d_dt.tz_localize(prices.index.tz)
+                else:
+                    d_dt = d_dt.tz_convert(prices.index.tz)
+
             if d_dt not in dates_dt:
                 continue
 

@@ -7,6 +7,7 @@ from pathlib import Path
 import yfinance as yf
 from matplotlib import pyplot as plt
 
+from analytics.adjustments import InstrumentProtocol
 from analytics.adjustments.dividend import DividendComponent
 from analytics.adjustments.fx_forward_carry import FxForwardCarryComponent
 from interface.bshdata import BshData
@@ -64,7 +65,7 @@ instruments = {inst_id: MockInstrument(inst_id) for inst_id in instrument_ids}
 # Crea adjuster
 print("Creazione adjuster...")
 adjuster = (
-    Adjuster(etf_prices, instruments=instruments)
+    Adjuster(etf_prices.interpolate(method='time'), instruments=instruments)
     .add(TerComponent(ter))
     .add(FxSpotComponent(fx_composition, fx_prices))
     .add(FxForwardCarryComponent(fx_forward_composition, fx_forward_prices, "1M", fx_prices))

@@ -64,8 +64,9 @@ def calculate_year_fractions(
         # Standard fractions
         for i, date in enumerate(dates_sorted):
             if i == 0:
-                # First date: assume 1 day
-                days = 1
+                # First date: no previous date, so no return period
+                # Set to 0 to align with pct_change() behavior (first return = 0)
+                days = 0
             else:
                 prev_date = dates_sorted[i - 1]
                 days = (date - prev_date).days
@@ -92,6 +93,8 @@ def normalize_fx_columns(fx_prices: pd.DataFrame) -> pd.DataFrame:
     Returns:
         DataFrame with normalized column names and inverted prices where needed
     """
+    if isinstance(fx_prices, pd.Series):
+        fx_prices = fx_prices.to_frame()
     normalized_columns = {}
     columns_to_invert = []  # Track which columns need 1/price
 

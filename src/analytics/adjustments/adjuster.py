@@ -1,15 +1,14 @@
 """
 Adjuster orchestrator for return adjustments.
-
-NEW DESIGN: Components own their data (no fx_prices in Adjuster).
 """
 from datetime import date, datetime
 import pandas as pd
 import logging
-from typing import Dict, Optional, Union, List
+from typing import Dict, Optional, Union, List, Literal
 
 from analytics.adjustments.component import Component
 from analytics.adjustments.protocols import InstrumentProtocol
+from analytics.adjustments.return_calculations import ReturnCalculator
 from core.instruments.instrument_factory import InstrumentFactory
 
 logger = logging.getLogger(__name__)
@@ -55,7 +54,9 @@ class Adjuster:
             self,
             prices: pd.DataFrame,
             instruments: Optional[Dict[str, InstrumentProtocol]] = None,
-            intraday: bool = False,
+            intraday: bool = True,
+            fill_method: Optional[Literal['ffill', 'bfill', 'time', 'linear']] = None,
+            return_type: Literal["percentage", "logarithmic", "absolute"] = "percentage",
     ):
         """
         Initialize adjuster.
@@ -67,12 +68,32 @@ class Adjuster:
             instruments: Optional dict[instrument_id -> Instrument object]
                         If None, fetches from InstrumentFactory
             intraday: If True, preserve intraday timestamps; if False, normalize to dates
+            fill_method: How to handle NaN values in prices
+                        - None: Keep NaN (propagates through calculations)
+                        - 'ffill': Forward fill missing prices
+                        - 'bfill': Backward fill missing prices
+                        - 'linear': Linear interpolation
+                        - 'time': Time-weighted interpolation (requires DatetimeIndex)
+                        - 'index': Index-based interpolation
+                        - 'polynomial': Polynomial interpolation
+                        - 'spline': Spline interpolation
+                        See pandas.DataFrame.interpolate() for all interpolation options
+            return_type: Type of returns to calculate
+                        - "percentage": (P_t - P_{t-1}) / P_{t-1}
+                        - "logarithmic": log(P_t / P_{t-1})
+                        - "absolute": P_t - P_{t-1}
         """
         self.intraday = intraday
+
+        # Create return calculator
+        self.return_calculator = ReturnCalculator(return_type)
 
         # Validate and normalize DataFrame
         self._prices = self._validate_and_transpose(prices, "prices")
 
+        # Handle missing values
+        if fill_method is not None:
+            self._prices = self._handle_missing(prices, fill_method)
         # Normalize dates if not intraday
         if not self.intraday:
             self._prices.index = self._prices.index.normalize()
@@ -164,6 +185,9 @@ class Adjuster:
         Returns:
             Self for chaining
         """
+        # Inject return calculator into component
+        component.set_return_calculator(self.return_calculator)
+
         self.components.append(component)
 
         # Register subscriptions if component is updatable
@@ -214,7 +238,8 @@ class Adjuster:
 
         # Calculate missing dates
         if len(missing_dates) > 0:
-            logger.debug(f"Adjuster: Calculating {len(missing_dates)} missing dates (cache hit: {len(calc_dates) - len(missing_dates)})")
+            logger.debug(
+                f"Adjuster: Calculating {len(missing_dates)} missing dates (cache hit: {len(calc_dates) - len(missing_dates)})")
             new_adj = self._calculate_for_dates(missing_dates)
 
             if self._adjustments is None:
@@ -266,7 +291,11 @@ class Adjuster:
         """
         Calculate clean returns by applying adjustments to raw returns.
 
-        Raw returns are calculated from self.prices using pct_change().
+        Raw returns are calculated using the return calculator.
+
+        IMPORTANT:
+        - The first return is always 0 (no previous price to compare to)
+        - NaN values in prices will result in NaN returns (unless fill_missing was set in constructor)
 
         Args:
             dates: Optional subset of dates to calculate for
@@ -275,7 +304,8 @@ class Adjuster:
             DataFrame(dates × instruments) with clean returns
         """
 
-        raw_returns = self.prices.pct_change(fill_method=None).fillna(0.0)
+        # Use return calculator for consistent return calculation
+        raw_returns = self.return_calculator.calculate_returns(self.prices)
         adjustments = self.calculate(dates)
         if dates is not None:
             raw_returns = raw_returns.loc[dates]
@@ -285,17 +315,23 @@ class Adjuster:
             fill_value=0.0
         )
 
+        # Ensure first return is always 0 (first price has no previous price for return calculation)
+        # This aligns with return calculator behavior and ensures clean price reconstruction works correctly
+        cleaned.iloc[0] = 0.0
+
         return cleaned
 
     def clean_prices(
             self,
             backpropagate: bool = True,
+            rebase: bool = False,
             dates: Union[list[date], list[datetime], None] = None,
     ) -> pd.DataFrame:
         """
         Reconstruct clean prices from adjustments.
 
         Args:
+            rebase: IF true, initial prices are set to 1.
             backpropagate: If True, start from last price and work backwards.
                           If False, start from first price and work forwards.
             dates: Optional subset of dates to calculate for
@@ -327,8 +363,24 @@ class Adjuster:
             # Reverse the returns
             reversed_returns = clean_returns.iloc[::-1]
 
-            # Calculate cumulative product backwards: P[t] = P[t+1] / (1 + r[t+1])
-            cumulative_factor = (1 + reversed_returns).cumprod()
+            # Calculate cumulative backwards using return calculator
+            # For percentage: (1 + r).cumprod()
+            # For log: exp(r.cumsum())
+            # For absolute: Need special handling
+            if self.return_calculator.return_type.value == "percentage":
+                cumulative_factor = (1 + reversed_returns).cumprod()
+            elif self.return_calculator.return_type.value == "logarithmic":
+                import numpy as np
+                cumulative_factor = np.exp(reversed_returns.cumsum())
+            else:  # absolute
+                # For absolute returns, backpropagation is not straightforward
+                # Use forward propagation instead
+                logger.warning("Backpropagation not supported for absolute returns, using forward propagation")
+                first_prices = anchor_prices.iloc[0].copy()
+                result = self.return_calculator.returns_to_prices(clean_returns, first_prices)
+                if rebase:
+                    result = result / last_prices
+                return result
 
             # Reverse back to original order
             cumulative_factor = cumulative_factor.iloc[::-1]
@@ -340,11 +392,11 @@ class Adjuster:
             # Multiply by last prices (broadcasting)
             clean_prices = normalized_factor.multiply(last_prices, axis=1)
         else:
-            # Start from first price and work forwards
+            # Start from first price and work forwards (use return calculator)
             first_prices = anchor_prices.iloc[0].copy()
-            cumulative_factor = (1 + clean_returns).cumprod()
-            clean_prices = cumulative_factor.multiply(first_prices, axis=1)
-
+            clean_prices = self.return_calculator.returns_to_prices(clean_returns, first_prices)
+            if rebase:
+                clean_prices = clean_prices / first_prices
         return clean_prices
 
     def update(
@@ -363,7 +415,7 @@ class Adjuster:
             append: If True, append to existing data (permanent).
                    If False, use for next calculation only (temporary).
             prices: New instrument prices (DataFrame with dates × instruments)
-            **kwargs: Component data (fx_prices, dividends, etc.)
+            **kwargs: Component data (fx_prices, dividends2.csv, etc.)
 
         Returns:
             Self for method chaining
@@ -507,6 +559,36 @@ class Adjuster:
         adjustments = adjustments.round(self.MAX_NUMBER_OF_SIGNIFICANT_DIGITS)
 
         return adjustments
+
+    @staticmethod
+    def _handle_missing(prices, fill_method):
+        if fill_method is not None:
+            if (nan_count_before := prices.isna().sum().sum()) > 0:
+                if fill_method == 'ffill':
+                    prices = prices.ffill()
+                    nan_count_after = prices.isna().sum().sum()
+                    logger.info(f"Adjuster: Filled {nan_count_before - nan_count_after} NaN values using ffill "
+                                f"({nan_count_after} NaN remaining)")
+
+                elif fill_method == 'bfill':
+                    prices = prices.bfill()
+                    nan_count_after = prices.isna().sum().sum()
+                    logger.info(f"Adjuster: Filled {nan_count_before - nan_count_after} NaN values using bfill "
+                                f"({nan_count_after} NaN remaining)")
+                else:
+                    # Interpolation methods
+                    try:
+                        prices = prices.interpolate(method=fill_method)
+                        nan_count_after = prices.isna().sum().sum()
+                        logger.info(
+                            f"Adjuster: Interpolated {nan_count_before - nan_count_after} NaN values using '{fill_method}' "
+                            f"({nan_count_after} NaN remaining)"
+                        )
+                    except Exception as e:
+                        logger.error(f"Adjuster: Interpolation failed with method '{fill_method}': {e}")
+                        raise ValueError(f"Invalid fill_method: '{fill_method}'") from e
+
+            return prices
 
     def __repr__(self) -> str:
         return (

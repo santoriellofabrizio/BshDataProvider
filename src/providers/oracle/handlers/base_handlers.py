@@ -256,7 +256,7 @@ class HistoricalFieldHandler(Handler, ABC):
     """
     Abstract base class for historical field handlers.
     
-    Historical handlers process time-series data (NAV history, dividends, etc).
+    Historical handlers process time-series data (NAV history, dividends2.csv, etc).
     """
 
     def set_next(self, handler: 'HistoricalFieldHandler') -> 'HistoricalFieldHandler':

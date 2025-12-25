@@ -13,7 +13,7 @@ Responsibilities:
     - Integrate caching and auto-completion via BaseAPI
 
 Typical usage:
-    >>> from src import BSHDataClient
+    >>> from client import BSHDataClient
     >>> client = BSHDataClient()
     >>> api = MarketDataAPI(client)
     >>> df = api.get_daily_etf("2024-01-01", "2024-02-01", isin="IE00B4L5Y983")
@@ -32,7 +32,7 @@ from typing import Union, Optional, List, Dict, Any
 from core.decorators.respect_cache_status import respect_cache_kwarg
 from core.enums.instrument_types import InstrumentType
 from core.requests.request_builder.request_builder import RequestBuilder
-from core.utils.common import normalize_list
+from core.utils.common import normalize_list, normalize_param
 from interface.api.base_api import BaseAPI
 
 
@@ -60,9 +60,9 @@ class MarketDataAPI(BaseAPI):
             self,
             instruments: list,
             fields: Union[str, List[str]],
-            source: Union[str, List[str]],
-            subscriptions: Optional[Union[str, List[str]]] = None,
-            market: Optional[Union[str, List[str]]] = None,
+            source: Union[str, List[str], Dict[str, str]],
+            subscriptions: Optional[Union[str, List[str], Dict[str, str]]] = None,
+            market: Optional[Union[str, List[str], Dict[str, str]]] = None,
             request_type: Optional[Union[str, List[str]]] = None,
             fallbacks: Optional[List[Dict[str, Any]]] = None,
             **kwargs,
@@ -80,9 +80,9 @@ class MarketDataAPI(BaseAPI):
         Args:
             instruments (list): List of instrument objects to query.
             fields (str | list[str]): Data fields to request.
-            source (str | list[str]): Data source(s) (e.g., 'timescale', 'bloomberg').
-            subscriptions (str | list[str], optional): Optional subscription identifiers.
-            market (str | list[str], optional): Market codes (e.g., 'ETFP', 'EUREX').
+            source (str | list[str] | dict[str, str]): Data source(s) (e.g., 'timescale', 'bloomberg').
+            subscriptions (str | list[str] | dict[str, str], optional): Optional subscription identifiers.
+            market (str | list[str] | dict[str, str], optional): Market codes (e.g., 'ETFP', 'EUREX').
             request_type: Type of request.
             fallbacks (list[dict], optional): Alternative configs to retry on incomplete results.
             **kwargs: Additional parameters forwarded to RequestBuilder.
@@ -93,11 +93,10 @@ class MarketDataAPI(BaseAPI):
         if not instruments:
             return None
 
-        n = len(instruments)
         fields = [fields] if isinstance(fields, str) else fields
-        market = normalize_list(market, n)
-        source = normalize_list(source, n)
-        subscriptions = normalize_list(subscriptions, n)
+        market = normalize_param(market, instruments, default=None)
+        source = normalize_param(source, instruments, default=None)
+        subscriptions = normalize_param(subscriptions, instruments, default=None)
 
         requests = []
 
@@ -168,12 +167,10 @@ class MarketDataAPI(BaseAPI):
 
             # Extract original instruments from incomplete statuses
             retry_instruments = [s.request.instrument for s in incomplete_statuses]
-            n = len(retry_instruments)
-
             # Override parameters from fallback config
-            retry_source = normalize_list(fallback_config.get("source"), n)
-            retry_market = normalize_list(fallback_config.get("market"), n)
-            retry_subscriptions = normalize_list(fallback_config.get("subscriptions"), n)
+            retry_source = normalize_param(fallback_config.get("source"), retry_instruments, default=None)
+            retry_market = normalize_param(fallback_config.get("market"), retry_instruments, default=None)
+            retry_subscriptions = normalize_param(fallback_config.get("subscriptions"), retry_instruments, default=None)
 
             # Build retry requests
             retry_requests = []
@@ -218,11 +215,11 @@ class MarketDataAPI(BaseAPI):
             isin: Optional[Union[str, List[str]]] = None,
             ticker: Optional[Union[str, List[str]]] = None,
             instruments: Optional[List] = None,  # ← NEW
-            market: Optional[Union[str, List[str]]] = None,
-            source: Optional[Union[str, List[str]]] = None,
+            market: Optional[Union[str, List[str], Dict[str, str]]] = None,
+            source: Optional[Union[str, List[str], Dict[str, str]]] = None,
             frequency: Optional[str] = "1d",
             fields: Union[str, List[str]] = "MID",
-            currency: Union[str, List[str]] = "EUR",
+            currency: Union[str, List[str], Dict[str, str]] = "EUR",
             snapshot_time: Optional[Union[str, time]] = None,
             subscription: Optional[Union[str, List[str], Dict[str, str]]] = None,
             autocomplete: Optional[bool] = None,
@@ -237,6 +234,22 @@ class MarketDataAPI(BaseAPI):
 
         Mode 2 - Use pre-built instruments:
             get(instruments=[etf1, etf2], start='2024-01-01', end='2024-12-31')
+
+        Dict mode support (NEW):
+            Parameters like currency, market, source, subscription can be passed as:
+            - Single value: "USD" (replicated to all instruments)
+            - List: ["USD", "EUR", "GBP"] (aligned with instruments)
+            - Dict: {"AAPL": "USD", "MSFT": "EUR"} (mapped by instrument ID, default for others)
+
+        Example with dict mode:
+            get(
+                type='ETP',
+                ticker=['IUSA', 'VUSA', 'CSPX'],
+                currency={"IUSA": "USD", "CSPX": "GBP"},  # VUSA gets default EUR
+                source={"CSPX": "oracle"},  # IUSA, VUSA get default
+                start='2024-01-01',
+                end='2024-12-31'
+            )
         """
         # Mode 2: pre-built instruments
         if instruments is not None:
@@ -259,9 +272,14 @@ class MarketDataAPI(BaseAPI):
         ids, isins, tickers = self._resolve_identifiers(id, isin, ticker, autocomplete=auto)
         n = len(ids)
 
-        currency = normalize_list(currency, n)
-        market = normalize_list(market, n)
-        type_ = normalize_list(type, n)
+        # Create mock instruments with IDs for normalize_param
+        class _MockInstrument:
+            def __init__(self, id_): self.id = id_
+        mock_instruments = [_MockInstrument(id_) for id_ in ids]
+
+        currency = normalize_param(currency, mock_instruments, default="EUR")
+        market = normalize_param(market, mock_instruments, default=None)
+        type_ = normalize_param(type, mock_instruments, default=None)
 
         # Separate instrument-building params from request params
         instrument_build_params = {
@@ -302,9 +320,9 @@ class MarketDataAPI(BaseAPI):
             self,
             instruments: List,
             fields: List[str],
-            source: List,
-            subscription: List,
-            market: List,
+            source: Union[str, List[str], Dict[str, str]],
+            subscription: Union[str, List[str], Dict[str, str]],
+            market: Union[str, List[str], Dict[str, str]],
             frequency: str,
             snapshot_time: Optional[time],
             start: Union[dt.date, datetime],
@@ -316,10 +334,8 @@ class MarketDataAPI(BaseAPI):
         if not isinstance(fields, list):
             fields = [fields]
         fields = [f.upper() for f in fields]
-        request_type = extra_params.pop("request_type", None)
-        n = len(instruments)
-        subscription = normalize_list(subscription, n)
-        source = normalize_list(source, n)
+        subscription = normalize_param(subscription, instruments, default=None)
+        source = normalize_param(source, instruments, default=None)
 
         request_type = extra_params.pop("request_type", None)
 
@@ -393,8 +409,8 @@ class MarketDataAPI(BaseAPI):
             fields: Union[str, List[str]] = "MID",
             start_time: Union[time, str] = "09:00:00",
             end_time: Union[time, str] = "17:00:00",
-            source: Optional[Union[str, List[str]]] = None,
-            market: Optional[Union[str, List[str]]] = None,
+            source: Optional[Union[str, List[str], Dict[str, str]]] = None,
+            market: Optional[Union[str, List[str], Dict[str, str]]] = None,
             subscription: Optional[Union[str, List[str], Dict[str, str]]] = None,
             **extra_params,
     ):
@@ -402,17 +418,18 @@ class MarketDataAPI(BaseAPI):
         Generic intraday data wrapper for any instrument (tick/bar level).
 
         Args:
+            frequency:
             date (date | str): Snapshot date.
             id: Optional[Union[str, List[str]]], optional): Instrument identifier.
             isin: Optional[Union[str, List[str]]], optional): Instrument isin.
             ticker: Optional[Union[str, List[str]]], optional): Instrument ticker.
             type (str): Instrument type ('ETP', 'FUTURE', etc.).
             fields (str | list[str]): Requested data fields.
-            source (str | list[str]): Data source(s).
-            market (str | list[str], optional): Market name(s).
+            source (str | list[str] | dict[str, str]): Data source(s).
+            market (str | list[str] | dict[str, str], optional): Market name(s).
             start_time (str | time): Snapshot start time (format as HH:MM:SS or time).
             end_time (str | time): Snapshot start time (format as HH:MM:SS or time).
-            subscription: Optional[Union[str, List[str]]]: Subscription identifier(s) to be used in reqeust.
+            subscription (str | list[str] | dict[str, str], optional): Subscription identifier(s).
 
         Returns:
             pd.Series | pd.DataFrame: Snapshot data for the specified date.
@@ -509,8 +526,8 @@ class MarketDataAPI(BaseAPI):
             fields: Union[str, List[str]] = "MID",
             start_time: Union[time, str] = "09:00:00",
             end_time: Union[time, str] = "17:00:00",
-            source: str = "timescale",
-            market: str = "ETFP",
+            source: Union[str, List[str], Dict[str, str]] = "timescale",
+            market: Union[str, List[str], Dict[str, str]] = "ETFP",
             **extra_params,
     ):
         """Dati intraday per ETF (ETP su ETFP di default). wraps get_intraday."""
@@ -653,9 +670,9 @@ class MarketDataAPI(BaseAPI):
             isin: Optional[Union[str, List[str]]] = None,
             ticker: Optional[Union[str, List[str]]] = None,
             fields: Union[str, List[str]] = "MID",
-            source: str = "timescale",
-            market: Optional[Union[str, List[str]]] = "ETFP",
-            currency: Union[str, List[str]] = "EUR",
+            source: Union[str, List[str], Dict[str, str]] = "timescale",
+            market: Optional[Union[str, List[str], Dict[str, str]]] = "ETFP",
+            currency: Union[str, List[str], Dict[str, str]] = "EUR",
             snapshot_time: Union[str, time] = "17:00:00",
             **extra_params,
     ):

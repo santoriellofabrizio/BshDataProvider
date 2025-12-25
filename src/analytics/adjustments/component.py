@@ -5,9 +5,12 @@ from abc import ABC, abstractmethod
 from datetime import date, datetime
 import pandas as pd
 import logging
-from typing import Union, List, Optional
+from typing import Union, List, Optional, TYPE_CHECKING
 
 from analytics.adjustments.protocols import InstrumentProtocol
+
+if TYPE_CHECKING:
+    from analytics.adjustments.return_calculations import ReturnCalculator
 
 logger = logging.getLogger(__name__)
 
@@ -51,6 +54,7 @@ class Component(ABC):
         """
         self.target = set(target) if target is not None else None
         self._children: List['Component'] = []  # For builder pattern
+        self._return_calculator: Optional['ReturnCalculator'] = None  # Injected by Adjuster
 
     def is_updatable(self) -> bool:
         """
@@ -179,21 +183,61 @@ class Component(ABC):
         pass
 
     # ========================================================================
+    # RETURN CALCULATOR INJECTION
+    # ========================================================================
+
+    def set_return_calculator(self, calculator: 'ReturnCalculator') -> None:
+        """
+        Inject return calculator (called by Adjuster.add()).
+
+        Args:
+            calculator: ReturnCalculator instance from parent Adjuster
+
+        Note:
+            This is called automatically when component is added to Adjuster.
+            Components should not call this directly.
+        """
+        self._return_calculator = calculator
+        logger.debug(f"{self.__class__.__name__}: ReturnCalculator injected (type={calculator.return_type.value})")
+
+    @property
+    def return_calculator(self) -> 'ReturnCalculator':
+        """
+        Access to return calculator.
+
+        Returns:
+            ReturnCalculator instance
+
+        Raises:
+            RuntimeError: If calculator not set (component not added to Adjuster)
+
+        Usage:
+            # In component's calculate_adjustment()
+            returns = self.return_calculator.calculate_returns(prices)
+        """
+        if self._return_calculator is None:
+            raise RuntimeError(
+                f"{self.__class__.__name__}: ReturnCalculator not set. "
+                "Component must be added to Adjuster via .add()"
+            )
+        return self._return_calculator
+
+    # ========================================================================
     # BUILDER PATTERN METHODS
     # ========================================================================
 
     def add(self, component: 'Component') -> 'Component':
         """
         Add a child component (builder pattern).
-        
+
         Returns the PARENT (self) for continued chaining.
-        
+
         Args:
             component: Child component to add
-        
+
         Returns:
             self (parent) for chaining
-        
+
         Example:
             chain = (
                 TerComponent(ter)
@@ -201,7 +245,7 @@ class Component(ABC):
                 .add(FxForwardCarryComponent(...))
                 .add(DividendComponent(divs))
             )
-            
+
             adjuster.add_chain(chain)
         """
         self._children.append(component)

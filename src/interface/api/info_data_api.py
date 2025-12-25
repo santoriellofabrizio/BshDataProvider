@@ -15,6 +15,8 @@ Responsibilities:
     - Expose convenience wrappers (e.g., get_ter, get_fx_composition, get_pcf_composition)
 
 Typical workflow:
+    >>> from client import BSHDataClient
+    >>> client = BSHDataClient()
     >>> api = InfoDataAPI(client)
     >>> ter = api.get_ter(isin="IE00B4L5Y983")
     >>> fx = api.get_fx_composition(isin="IE00B4L5Y983", source="oracle")
@@ -33,8 +35,17 @@ from core.decorators.respect_cache_status import respect_cache_kwarg
 from core.enums.fields import StaticField
 from core.holidays.holiday_manager import HolidayManager
 from core.requests.request_builder.request_builder import RequestBuilder
-from core.utils.common import normalize_list
+from core.utils.common import normalize_list, normalize_param
 from interface.api.base_api import BaseAPI
+from interface.api.type_hints import (
+    InfoDataGetParams,
+    FXCompositionParams,
+    PCFCompositionParams,
+    DividendsParams,
+    TERParams,
+    NAVParams,
+    PricesParams
+)
 
 logger = logging.getLogger(__name__)
 
@@ -55,10 +66,10 @@ class InfoDataAPI(BaseAPI):
             self,
             instruments: list,
             fields: Union[str, List[str]],
-            source: Union[str, List[str]],
-            type: Union[str, List[str]],
-            subscriptions: Optional[Union[str, List[str]]] = None,
-            market: Optional[Union[str, List[str]]] = None,
+            source: Union[str, List[str], Dict[str, str]],
+            type: Union[str, List[str], Dict[str, str]],
+            subscriptions: Optional[Union[str, List[str], Dict[str, str]]] = None,
+            market: Optional[Union[str, List[str], Dict[str, str]]] = None,
             fallbacks: Optional[List[Dict[str, Any]]] = None,
             **kwargs,
     ):
@@ -75,10 +86,10 @@ class InfoDataAPI(BaseAPI):
         Args:
             instruments (list): List of instrument objects to query.
             fields (str | list[str]): Data fields to request.
-            source (str | list[str]): Data source(s) (e.g., 'oracle', 'bloomberg').
-            type (str | list[str]): Request type(s) ('reference', 'bulk', 'historical').
-            subscriptions (str | list[str], optional): Optional subscription identifiers.
-            market (str | list[str], optional): Market codes (e.g., 'ETFP', 'EUREX').
+            source (str | list[str] | dict[str, str]): Data source(s) (e.g., 'oracle', 'bloomberg').
+            type (str | list[str] | dict[str, str]): Request type(s) ('reference', 'bulk', 'historical').
+            subscriptions (str | list[str] | dict[str, str], optional): Optional subscription identifiers.
+            market (str | list[str] | dict[str, str], optional): Market codes (e.g., 'ETFP', 'EUREX').
             fallbacks (list[dict], optional): Alternative configs to retry on incomplete results.
             **kwargs: Additional parameters forwarded to RequestBuilder.
 
@@ -88,11 +99,12 @@ class InfoDataAPI(BaseAPI):
         if not instruments:
             return None
 
-        n = len(instruments)
         fields = [fields] if isinstance(fields, str) else fields
-        market = normalize_list(market, n)
-        source = normalize_list(source, n)
-        subscriptions = normalize_list(subscriptions, n)
+        # Use normalize_param to support dict mode
+        market = normalize_param(market, instruments, default=None)
+        source = normalize_param(source, instruments, default=None)
+        subscriptions = normalize_param(subscriptions, instruments, default=None)
+        type = normalize_param(type, instruments, default=None)
 
         requests = []
 
@@ -166,12 +178,11 @@ class InfoDataAPI(BaseAPI):
 
             # Extract original instruments from incomplete statuses
             retry_instruments = [s.request.instrument for s in incomplete_statuses]
-            n = len(retry_instruments)
 
-            # Override parameters from fallback config
-            retry_source = normalize_list(fallback_config.get("source"), n)
-            retry_market = normalize_list(fallback_config.get("market"), n)
-            retry_subscriptions = normalize_list(fallback_config.get("subscriptions"), n)
+            # Override parameters from fallback config (support dict mode)
+            retry_source = normalize_param(fallback_config.get("source"), retry_instruments, default=None)
+            retry_market = normalize_param(fallback_config.get("market"), retry_instruments, default=None)
+            retry_subscriptions = normalize_param(fallback_config.get("subscriptions"), retry_instruments, default=None)
 
 
             # Merge kwargs with fallback config (fallback overrides)
@@ -223,8 +234,8 @@ class InfoDataAPI(BaseAPI):
             isin: Optional[Union[str, List[str]]] = None,
             ticker: Optional[Union[str, List[str]]] = None,
             instruments: Optional[List] = None,  # ← NEW
-            market: Optional[Union[str, List[str]]] = None,
-            currency: Union[str, List[str]] = "EUR",
+            market: Optional[Union[str, List[str], Dict[str, str]]] = None,
+            currency: Union[str, List[str], Dict[str, str]] = "EUR",
             autocomplete: Optional[bool] = None,
             **kwargs,
     ):
@@ -236,6 +247,21 @@ class InfoDataAPI(BaseAPI):
 
         Mode 2 - Use pre-built instruments:
             get(instruments=[etf1, etf2], fields='TER', source='bloomberg')
+
+        Dict mode support (NEW):
+            Parameters like currency, market, source can be passed as:
+            - Single value: "USD" (replicated to all instruments)
+            - List: ["USD", "EUR", "GBP"] (aligned with instruments)
+            - Dict: {"AAPL": "USD", "MSFT": "EUR"} (mapped by instrument ID, default for others)
+
+        Type hints support:
+            For IDE autocomplete when using **kwargs pattern:
+
+            from interface.api.type_hints import InfoDataGetParams
+
+            def wrapper(**kwargs):
+                params: InfoDataGetParams = kwargs  # IDE autocomplete enabled
+                return api.get(**params)
         """
         # Mode 2: pre-built instruments
         if instruments is not None:
@@ -271,19 +297,23 @@ class InfoDataAPI(BaseAPI):
             self,
             instruments: list,
             fields: Union[str, List[str]] = "MID",
-            source: Optional[Union[str, List[str]]] = None,
-            subscriptions: Optional[Union[str, List[str]]] = None,
-            market: Optional[Union[str, List[str]]] = None,
-            request_type: Optional[Union[str, List[str]]] = None,
+            source: Optional[Union[str, List[str], Dict[str, str]]] = None,
+            subscriptions: Optional[Union[str, List[str], Dict[str, str]]] = None,
+            market: Optional[Union[str, List[str], Dict[str, str]]] = None,
+            request_type: Optional[Union[str, List[str], Dict[str, str]]] = None,
             fallbacks: Optional[List[Dict[str, Any]]] = None,
             **extra_params,
     ):
-        """Execute request with pre-built instruments."""
-        n = len(instruments)
-        source = normalize_list(source, n)
-        subscriptions = normalize_list(subscriptions, n)
-        market = normalize_list(market, n)
-        request_type = normalize_list(request_type, n)
+        """
+        Execute request with pre-built instruments.
+
+        Supports dict mode for parameters (mapped by instrument ID).
+        """
+        # Use normalize_param to support dict mode
+        source = normalize_param(source, instruments, default=None)
+        subscriptions = normalize_param(subscriptions, instruments, default=None)
+        market = normalize_param(market, instruments, default=None)
+        request_type = normalize_param(request_type, instruments, default=None)
 
         result = self._dispatch(
             instruments=instruments,
@@ -359,8 +389,19 @@ class InfoDataAPI(BaseAPI):
     # CONVENIENCE WRAPPERS
     # ============================================================
 
-    def get_ter(self, id=None, isin=None, ticker=None, source="bloomberg", **kwargs):
-        """Restituisce il TER (Total Expense Ratio) degli ETF."""
+    def get_ter(
+            self,
+            id: Optional[Union[str, List[str]]] = None,
+            isin: Optional[Union[str, List[str]]] = None,
+            ticker: Optional[Union[str, List[str]]] = None,
+            source: Union[str, List[str], Dict[str, str]] = "bloomberg",
+            **kwargs
+    ):
+        """
+        Restituisce il TER (Total Expense Ratio) degli ETF.
+
+        Supports dict mode for source parameter (mapped by instrument ID).
+        """
         return self.get(
             type="ETP",
             id=id,
@@ -374,14 +415,18 @@ class InfoDataAPI(BaseAPI):
 
     def get_dividends(
             self,
-            isin=None,
-            id=None,
-            ticker=None,
+            isin: Optional[Union[str, List[str]]] = None,
+            id: Optional[Union[str, List[str]]] = None,
+            ticker: Optional[Union[str, List[str]]] = None,
             start=today() - timedelta(days=360),
             end=today(),
-            source="bloomberg",
+            source: Union[str, List[str], Dict[str, str]] = "bloomberg",
     ):
-        """Restituisce i dividendi storici."""
+        """
+        Restituisce i dividendi storici.
+
+        Supports dict mode for source parameter (mapped by instrument ID).
+        """
         return self.get(
             type="ETP",
             id=id,
@@ -396,15 +441,23 @@ class InfoDataAPI(BaseAPI):
 
     def get_fx_composition(
             self,
-            isin=None,
-            ticker=None,
-            id=None,
+            isin: Optional[Union[str, List[str]]] = None,
+            ticker: Optional[Union[str, List[str]]] = None,
+            id: Optional[Union[str, List[str]]] = None,
             reference_date=None,
             fx_fxfwrd: Literal["fx", "fxfwrd", "both"] = "both",
-            source="oracle",
+            source: Union[str, List[str], Dict[str, str]] = "oracle",
             **kwargs
     ):
-        """Restituisce la composizione valutaria (FX composition)."""
+        """
+        Restituisce la composizione valutaria (FX composition).
+
+        Supports dict mode for source parameter (mapped by instrument ID).
+
+        """
+        # Type hint for kwargs (IDE support)
+        _params: FXCompositionParams = kwargs
+
         return self.get(
             type="ETP",
             id=id,
@@ -420,24 +473,25 @@ class InfoDataAPI(BaseAPI):
 
     def get_pcf_composition(
             self,
-            id=None,
-            isins=None,
-            ticker=None,
+            id: Optional[Union[str, List[str]]] = None,
+            isins: Optional[Union[str, List[str]]] = None,
+            ticker: Optional[Union[str, List[str]]] = None,
             reference_date=None,
-            source="oracle",
+            source: Union[str, List[str], Dict[str, str]] = "oracle",
             include_cash=False,
-            comp_field="WEIGHT_NAV"
+            comp_field: Literal["WEIGHT_NAV", "N_INSTRUMENTS", "WEIGHT_RISK", "RAW"] = "WEIGHT_NAV"
     ):
-        """Restituisce la composizione PCF."""
+        """
+        Restituisce la composizione PCF.
+
+        Supports dict mode for source parameter (mapped by instrument ID).
+        """
         if isinstance(reference_date, str):
             ref = reference_date.lower()
             if ref == "yesterday":
                 reference_date = HolidayManager().previous_business_day(today())
             elif ref == "last":
                 reference_date = None
-
-        if comp_field.upper() not in ["WEIGHT_NAV", "N_INSTRUMENTS", "WEIGHT_RISK", "RAW"]:
-            raise ValueError("Invalid comp_field")
 
         raw = self.get(
             "ETP",
@@ -471,14 +525,18 @@ class InfoDataAPI(BaseAPI):
             id: Optional[Union[str, List[str]]] = None,
             isin: Optional[Union[str, List[str]]] = None,
             ticker: Optional[Union[str, List[str]]] = None,
-            market: Optional[Union[str, List[str]]] = None,
-            source: Optional[Union[str, List[str]]] = "oracle",
-            currency: Union[str, List[str]] = "EUR",
+            market: Optional[Union[str, List[str], Dict[str, str]]] = None,
+            source: Optional[Union[str, List[str], Dict[str, str]]] = "oracle",
+            currency: Union[str, List[str], Dict[str, str]] = "EUR",
             subscriptions: Optional[Union[str, List[str], Dict[str, str]]] = None,
             autocomplete: Optional[bool] = None,
             **extra_params,
     ):
-        """Get ETP fields."""
+        """
+        Get ETP fields.
+
+        Supports dict mode for market, source, currency, subscriptions parameters (mapped by instrument ID).
+        """
         return self.get(
             type=type,
             id=id,
@@ -496,14 +554,18 @@ class InfoDataAPI(BaseAPI):
     def get_nav(
             self,
             start,
-            id=None,
-            ticker=None,
-            isin=None,
-            subscriptions=None,
-            source="bloomberg",
+            id: Optional[Union[str, List[str]]] = None,
+            ticker: Optional[Union[str, List[str]]] = None,
+            isin: Optional[Union[str, List[str]]] = None,
+            subscriptions: Optional[Union[str, List[str], Dict[str, str]]] = None,
+            source: Union[str, List[str], Dict[str, str]] = "bloomberg",
             end=today()
     ):
-        """Restituisce i NAV storici."""
+        """
+        Restituisce i NAV storici.
+
+        Supports dict mode for source and subscriptions parameters (mapped by instrument ID).
+        """
         return self.get(
             type="ETP",
             id=id,

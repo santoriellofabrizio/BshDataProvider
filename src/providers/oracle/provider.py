@@ -44,7 +44,7 @@ class OracleProvider(BaseProvider):
     and delegates data retrieval to the :class:`OracleInfoFetcher`, which groups
     queries into four logical categories:
         - ``fetch_reference()``: for static metadata (ISIN, ticker, TER, etc.)
-        - ``fetch_historical()``: for time-dependent values (NAV, dividends, etc.)
+        - ``fetch_historical()``: for time-dependent values (NAV, dividends2.csv, etc.)
         - ``fetch_bulk()``: for batch composition data (PCF, FX composition, etc.)
         - ``fetch_general()``: for general-purpose or schema-wide queries
 

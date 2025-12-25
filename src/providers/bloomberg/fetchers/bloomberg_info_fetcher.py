@@ -16,7 +16,7 @@ Responsibilities:
     - Build and send Bloomberg reference, historical, and bulk requests
     - Handle event-driven BLPAPI responses and errors
     - Parse nested field structures into Python dictionaries
-    - Normalize date and structure formats for dividends and other bulk data
+    - Normalize date and structure formats for dividends2.csv and other bulk data
     - Integrate with BSH cache decorators for improved performance
 
 Example:

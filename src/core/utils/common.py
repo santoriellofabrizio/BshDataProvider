@@ -52,3 +52,68 @@ def normalize_list(value, n: int):
             raise ValueError("Lista parametri incoerente con numero strumenti.")
         return value
     return [value] * n
+
+
+def normalize_param(value, instruments, default=None):
+    """
+    Normalizes parameter input to aligned list matching instruments.
+
+    Supports three modes:
+    1. Single value (str/scalar): Replicate for all instruments
+    2. List: Must match instrument count (or length 1 to replicate)
+    3. Dict: Map instrument IDs to values, use default for missing entries
+
+    Args:
+        value: Input parameter (str, list, or dict)
+        instruments: List of instrument objects with .id attribute
+        default: Default value for missing dict entries (default: None)
+
+    Returns:
+        List aligned with instruments
+
+    Raises:
+        ValueError: If list length doesn't match instrument count
+        TypeError: If value type is not supported
+
+    Examples:
+        >>> instruments = [inst1, inst2, inst3]  # inst1.id="AAPL", inst2.id="MSFT", inst3.id="GOOGL"
+
+        # Single value - replicate to all
+        >>> normalize_param("USD", instruments)
+        ["USD", "USD", "USD"]
+
+        # List - must match count
+        >>> normalize_param(["USD", "EUR", "GBP"], instruments)
+        ["USD", "EUR", "GBP"]
+
+        # Dict - map by ID, use default for missing
+        >>> normalize_param({"AAPL": "USD", "GOOGL": "EUR"}, instruments, default="USD")
+        ["USD", "USD", "EUR"]
+    """
+    n = len(instruments)
+
+    # None → list of default values
+    if value is None:
+        return [default] * n
+
+    # Dict mode: map by instrument ID
+    if isinstance(value, dict):
+        result = []
+        for inst in instruments:
+            inst_id = inst.id if hasattr(inst, 'id') else str(inst)
+            result.append(value.get(inst_id, default))
+        return result
+
+    # List mode: validate length
+    if isinstance(value, list):
+        if len(value) == 1 and n > 1:
+            return value * n
+        if len(value) != n:
+            raise ValueError(
+                f"Lista parametri incoerente con numero strumenti. "
+                f"Atteso {n}, ricevuto {len(value)}."
+            )
+        return value
+
+    # Single value mode: replicate to all
+    return [value] * n

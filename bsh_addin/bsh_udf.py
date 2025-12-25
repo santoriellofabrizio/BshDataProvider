@@ -72,7 +72,7 @@ def get_nav(id_code,
         return "ERROR"
 
 
-@xw.func(category="InfoData", description="Get historical dividends using ISIN or ticker.")
+@xw.func(category="InfoData", description="Get historical dividends2.csv using ISIN or ticker.")
 @xw.ret(expand="table")
 def get_dividends(id_code,
                   start_date=None,

@@ -226,9 +226,9 @@ class FxSpotComponent(Component):
             f"FxSpotComponent: Processing {len(applicable_ids)}/{len(instruments)} instruments"
         )
 
-        # 6. Get fx_prices (temp or permanent) and calculate FX returns
+        # 6. Get fx_prices (temp or permanent) and calculate FX returns using return calculator
         current_fx_prices = self.fx_prices
-        fx_returns = current_fx_prices.pct_change(fill_method=None)
+        fx_returns = self.return_calculator.calculate_returns(current_fx_prices)
         fx_returns = fx_returns.where(fx_returns.notna(), 0.0)
 
         # Clear temp data after use
@@ -255,11 +255,9 @@ class FxSpotComponent(Component):
         # Align currencies between composition and fx_returns
         common_currencies = comp_matrix.columns.intersection(fx_returns.columns)
         if len(common_currencies) == 0:
-            logger.error(
-                f"FxSpotComponent: No currency overlap. "
-                f"Composition currencies: {list(comp_matrix.columns)}, "
-                f"FX currencies: {list(fx_returns.columns)}"
-            )
+            logger.error(f"FxSpotComponent: No currency overlap. Composition currencies: "
+                         f"{list(comp_matrix.columns)}, FX currencies: {list(fx_returns.columns)}")
+
             result = pd.DataFrame(0.0, index=dates_dt, columns=instrument_ids)
             self.validate_output(result)
             return result
