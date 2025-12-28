@@ -6,6 +6,7 @@ durante il suo ciclo di vita nel sistema BSH Data Provider.
 """
 
 from enum import Enum
+import math
 from typing import Set, Any, Dict
 
 
@@ -169,9 +170,10 @@ def is_value_empty(value: Any) -> bool:
 
     Vuoto significa:
         - None
+        - NaN (float o numpy)
         - Lista/dict vuoti
-        - Lista/dict con solo valori None
-        - Time series con tutti i valori None
+        - Lista/dict con solo valori None/NaN
+        - Time series con tutti i valori None/NaN
 
     Args:
         value: Valore da valutare
@@ -181,6 +183,8 @@ def is_value_empty(value: Any) -> bool:
 
     Examples:
         >>> is_value_empty(None)
+        True
+        >>> is_value_empty(float('nan'))
         True
         >>> is_value_empty(0.005)
         False
@@ -193,6 +197,18 @@ def is_value_empty(value: Any) -> bool:
     """
     if value is None:
         return True
+
+    # Gestisci NaN per float e numpy
+    if isinstance(value, float) and math.isnan(value):
+        return True
+    
+    # Gestisci numpy.nan (se numpy è presente)
+    try:
+        import numpy as np
+        if isinstance(value, (np.floating, np.integer)) and np.isnan(value):
+            return True
+    except (ImportError, TypeError):
+        pass
 
     if isinstance(value, (list, tuple)):
         if len(value) == 0:
@@ -224,19 +240,21 @@ def is_value_empty(value: Any) -> bool:
 def evaluate_result_quality(result_data: Dict[str, Any]) -> Dict[str, bool]:
     """
     Valuta la qualità di ogni field in un risultato.
+    
+    Le chiavi vengono normalizzate a UPPERCASE per consistenza.
 
     Args:
         result_data: Dizionario {field_name: value}
 
     Returns:
-        Dizionario {field_name: has_valid_data}
+        Dizionario {FIELD_NAME: has_valid_data} (chiavi uppercase)
 
     Example:
-        >>> evaluate_result_quality({"TER": 0.005, "NAV": None, "PRICES": []})
+        >>> evaluate_result_quality({"ter": 0.005, "NAV": None, "Prices": []})
         {"TER": True, "NAV": False, "PRICES": False}
     """
     return {
-        field: not is_value_empty(value)
+        field.upper(): not is_value_empty(value)
         for field, value in result_data.items()
     }
 

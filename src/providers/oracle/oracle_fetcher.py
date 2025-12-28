@@ -17,7 +17,7 @@ from providers.oracle.handlers.reference_field_handler import ISINLookupHandler,
 logger = logging.getLogger(__name__)
 
 
-class OracleInfoFetcher:
+class OracleFetcher:
     """
     Oracle data fetcher implementing Chain-of-Responsibility with batch processing.
     """

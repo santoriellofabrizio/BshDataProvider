@@ -78,9 +78,21 @@ class RequestTracker:
     def mark_failed(
         self,
         request_id: str,
-        error: Optional[Exception] = None
+        error: Optional[Exception] = None,
+        preserve_received: bool = True
     ) -> Optional[RequestStatus]:
-        """Marca una richiesta come fallita."""
+        """
+        Marca una richiesta come fallita.
+        
+        Args:
+            request_id: ID della richiesta
+            error: Eccezione opzionale da registrare
+            preserve_received: Se True, preserva i field già ricevuti (default).
+                             Se False, azzera fields_received.
+        
+        Returns:
+            Nuovo RequestStatus in stato FAILED, o None se request_id non trovato
+        """
         with self._lock:
             if request_id not in self._statuses:
                 return None
@@ -90,7 +102,7 @@ class RequestTracker:
                 request=status.request,
                 state=RequestState.FAILED,
                 fields_requested=status.fields_requested,
-                fields_received=set(),
+                fields_received=status.fields_received if preserve_received else set(),
                 error=error,
                 provider=status.provider,
                 metadata=status.metadata,

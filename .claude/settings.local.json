@@ -1,0 +1,24 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(powershell -Command \"Get-Content ''C:\\AFMachineLearning\\Libraries\\BshDataProvider\\src\\analytics\\adjustments\\fx_spot.py''\")",
+      "Bash(powershell -Command \"Get-Content ''C:\\AFMachineLearning\\Libraries\\BshDataProvider\\src\\analytics\\adjustments\\ter.py''\")",
+      "Bash(powershell -Command \"Get-Content ''C:\\AFMachineLearning\\Libraries\\BshDataProvider\\src\\analytics\\adjustments\\protocols.py''\")",
+      "Bash(powershell -Command \"Get-Content ''C:\\AFMachineLearning\\Libraries\\BshDataProvider\\src\\analytics\\adjustments\\component.py''\")",
+      "Bash(powershell -Command \"Get-Content ''C:\\AFMachineLearning\\Libraries\\BshDataProvider\\src\\analytics\\adjustments\\adjuster.py''\")",
+      "Bash(Select-Object -Skip 63 -First 30)",
+      "Bash(powershell -Command \"(Get-Content ''C:\\AFMachineLearning\\Libraries\\BshDataProvider\\src\\analytics\\adjustments\\component.py'')[63..92]\")",
+      "Bash(python:*)",
+      "Bash(powershell -Command \"(Get-Content ''C:\\AFMachineLearning\\Libraries\\BshDataProvider\\src\\analytics\\adjustments\\adjuster.py'')[163..192]\")",
+      "Bash(set PYTHONPATH=%cd%src)",
+      "Bash(powershell -Command \"$env:PYTHONPATH=''C:\\AFMachineLearning\\Libraries\\BshDataProvider\\src''; python test_adjustments_intraday.py\")",
+      "Bash(powershell -Command \"(Get-Content ''''C:\\AFMachineLearning\\Libraries\\BshDataProvider\\src\\analytics\\adjustments\\fx_spot.py'''')[163..192]\")",
+      "Bash(powershell -Command \"$env:PYTHONPATH=''C:\\AFMachineLearning\\Libraries\\BshDataProvider\\src''; cd ''C:\\AFMachineLearning\\Libraries\\BshDataProvider''; python test_adjustments_intraday.py\")",
+      "Bash(del:*)",
+      "Bash(set PYTHONPATH=C:AFMachineLearningLibrariesBshDataProvidersrc)",
+      "Bash(powershell -Command \"$env:PYTHONPATH=''C:\\AFMachineLearning\\Libraries\\BshDataProvider\\src''; cd ''C:\\AFMachineLearning\\Libraries\\BshDataProvider''; python test_updatable_components.py\")",
+      "Bash(powershell -Command \"$env:PYTHONPATH=''C:\\AFMachineLearning\\Libraries\\BshDataProvider\\src''; python test_updatable_components.py\")",
+      "Bash(powershell -Command \"$env:PYTHONPATH=''C:\\AFMachineLearning\\Libraries\\BshDataProvider\\src''; cd ''C:\\AFMachineLearning\\Libraries\\BshDataProvider''; python test_normalize_param.py\")"
+    ]
+  }
+}

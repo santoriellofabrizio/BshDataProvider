@@ -6,6 +6,7 @@ import pandas as pd
 
 from providers.oracle.query_oracle import QueryOracle
 from .base_classifier import BaseClassifier
+from ...enums.issuers import IssuerGroup, normalize_issuer
 
 
 class ETPClassifier(BaseClassifier):
@@ -94,3 +95,8 @@ class ETPClassifier(BaseClassifier):
         self._load()
         result = self._df.loc[(self._df["ISIN"] == id_), "ISSUE_DATE"]
         return result.iloc[0] if len(result) > 0 else None
+
+    def get_issuer(self, id_) -> IssuerGroup:
+        self._load()
+        result = self._df.loc[(self._df["ISIN"] == id_), "SHORT_NAME"]
+        return normalize_issuer(result.iloc[0] if len(result) > 0 else None)

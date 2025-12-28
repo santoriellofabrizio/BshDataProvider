@@ -11,6 +11,3 @@ class BaseProvider(ABC):
 
     def fetch_info_data(self, request: BaseStaticRequest | List[BaseStaticRequest]):
         pass
-
-    def healthcheck(self):
-        pass

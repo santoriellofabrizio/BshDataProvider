@@ -181,6 +181,7 @@ class InstrumentFactory(Singleton):
         mkt = kwargs.get("market")
         payment_policy = kwargs.get("payment_policy")
         fund_currency = kwargs.get("fund_currency")
+        issuer = kwargs.get("issuer")
 
         if autocomplete:
             if not ticker and not isin:
@@ -191,6 +192,7 @@ class InstrumentFactory(Singleton):
             underlying = underlying or self.classifier.etp.get_undelying_type(isin)
             fund_currency = fund_currency or self.classifier.etp.get_fund_currency(isin)
             payment_policy = payment_policy or self.classifier.etp.get_payment_policy(isin)
+            issuer = issuer or self.classifier.etp.get_issuer(isin)
 
         cls: Type[Instrument] = InstrumentRegistry.get_class(InstrumentType.ETP)
         return cls(
@@ -201,7 +203,8 @@ class InstrumentFactory(Singleton):
             currency=currency,
             underlying_type=underlying,
             payment_policy=payment_policy,
-            fund_currency=fund_currency
+            fund_currency=fund_currency,
+            issuer=issuer
         )
 
     def _build_currency_pair(self, id_, autocomplete, **kwargs) -> CurrencyPairInstrument:

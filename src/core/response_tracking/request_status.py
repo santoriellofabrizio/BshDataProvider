@@ -109,6 +109,8 @@ class RequestStatus:
 
         Riconosce timeseries (dict di {date: value}) e conta come ricevuto
         anche se ha alcuni None, ma registra i metadata sulla completezza.
+        
+        Tutte le chiavi vengono normalizzate a UPPERCASE per consistenza.
 
         Args:
             result_data: Dizionario con i dati ricevuti (formato: {field: value})
@@ -133,39 +135,45 @@ class RequestStatus:
             >>> new_status.metadata["timeseries_MID_incomplete"]
             {'total': 2, 'missing': 1, 'completion_rate': 0.5}
         """
-        # Valuta la qualità di ogni field
-        quality = evaluate_result_quality(result_data)
+        # Normalizza result_data a UPPERCASE per consistenza
+        result_data_upper = {k.upper(): v for k, v in result_data.items()}
+        
+        # Valuta la qualità di ogni field (già uppercase da evaluate_result_quality)
+        quality = evaluate_result_quality(result_data_upper)
 
         # Estrai field con dati validi
         fields_received = set()
         updated_metadata = dict(self.metadata)
 
         for field_name, has_valid_data in quality.items():
-            field_upper = field_name.upper()
-
+            # field_name è già UPPERCASE
             if has_valid_data:
-                fields_received.add(field_upper)
+                fields_received.add(field_name)
 
                 # Controlla se è timeseries con valori mancanti
-                field_value = result_data.get(field_name)
+                field_value = result_data_upper.get(field_name)
                 if isinstance(field_value, dict):
                     # È un dizionario, potrebbe essere timeseries
                     total_entries = len(field_value)
-                    missing_entries = sum(1 for v in field_value.values() if v is None)
+                    # Conta anche NaN come missing
+                    missing_entries = sum(
+                        1 for v in field_value.values() 
+                        if v is None or (isinstance(v, float) and v != v)  # NaN check: v != v
+                    )
                     
                     if missing_entries > 0:
                         # Timeseries incompleta - registra metadata
-                        updated_metadata[f"timeseries_{field_upper}_incomplete"] = {
+                        updated_metadata[f"timeseries_{field_name}_incomplete"] = {
                             "total": total_entries,
                             "missing": missing_entries,
                             "completion_rate": (total_entries - missing_entries) / total_entries if total_entries > 0 else 0.0
                         }
 
-        # Inferisci nuovo stato
+        # Inferisci nuovo stato (passa result_data_upper per consistenza)
         new_state = infer_state_from_result(
             fields_requested=self.fields_requested,
             fields_received=fields_received,
-            result_data=result_data,
+            result_data=result_data_upper,
             has_error=(error is not None)
         )
 

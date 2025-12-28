@@ -72,6 +72,9 @@ class EtfInstrument(Instrument):
     underlying_type: Optional[str] = None
     payment_policy: Literal["DIST", "ACC"] | None = None
     fund_currency: Optional[CurrencyEnum] = None
+    underlying_index: Optional[Literal["EQUITY", "FIXED INCOME", "COMMODITY"]] = None
+    index_provider: Optional[str] = None
+    replication_method: Optional[str] = None
 
     def __post_init__(self):
         self.type = InstrumentType.ETP

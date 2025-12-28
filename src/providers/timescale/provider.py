@@ -4,13 +4,13 @@ timescale_provider.py — Unified provider for TimescaleDB market data.
 This module defines the :class:`TimescaleProvider`, the unified access layer for
 retrieving time-series and intraday data from TimescaleDB. It handles connection
 initialization, environment-based configuration loading, and request dispatch
-through the :class:`TSTimescaleFetcher`.
+through the :class:`TimescaleFetcher`.
 
 Responsibilities:
     - Load TimescaleDB connection parameters from environment or YAML
     - Initialize the :class:`QueryTimeScale` connection interface
     - Dispatch and group requests by frequency, instrument type, and currency
-    - Delegate market data retrieval to :class:`TSTimescaleFetcher`
+    - Delegate data retrieval to :class:`TimescaleFetcher`
     - Provide basic connection health checks
 
 Example:
@@ -23,10 +23,8 @@ from collections import defaultdict
 from typing import List, Union, Dict, Tuple, Optional
 
 from core.enums.datasources import DataSource
-from core.utils.common import load_yaml
 from core.utils.config_manager import ConfigManager
-from providers.timescale.fetchers.timescale_info_fetcher import TimescaleInfoFetcher
-from providers.timescale.fetchers.timescale_market_fetcher import TimescaleMarketFetcher
+from providers.timescale.timescale_fetcher import TimescaleFetcher
 from providers.timescale.query_timescale import QueryTimeScale
 from sfm_dbconnections.DbConnectionParameters import DbConnectionParameters, TimescaleConnectionParameters
 
@@ -42,15 +40,15 @@ class TimescaleProvider(BaseProvider):
     Unified provider for TimescaleDB market data (daily and intraday).
 
     The TimescaleProvider centralizes all access to time-series data stored in
-    TimescaleDB, grouping requests and routing them to the appropriate fetcher.
+    TimescaleDB, grouping requests and routing them to a unified fetcher.
     It is designed to be compatible with the unified BSH data client and integrates
-    seamlessly with the system’s market API layer.
+    seamlessly with the system's market API layer.
 
     Responsibilities:
         - Load connection settings from the environment or YAML configuration
         - Initialize the :class:`QueryTimeScale` client
         - Dispatch market requests by instrument type and frequency
-        - Route to the proper :class:`TSTimescaleFetcher` method
+        - Route to the :class:`TimescaleFetcher`
         - Handle both daily (EOD) and intraday series retrieval
 
     Args:
@@ -103,8 +101,7 @@ class TimescaleProvider(BaseProvider):
             # ===========================================================
             self.query_ts = QueryTimeScale(**cfg_dict)
             self.source = DataSource.TIMESCALE
-            self.market_fetcher = TimescaleMarketFetcher(self.query_ts)
-            self.info_fetcher = TimescaleInfoFetcher(self.query_ts)
+            self.fetcher = TimescaleFetcher(self.query_ts)
             logger.info("✅ TimescaleProvider initialized successfully")
 
         except Exception as e:
@@ -164,7 +161,7 @@ class TimescaleProvider(BaseProvider):
             n = len(batch)
             logger.debug(f"[{freq_type.upper()}] {inst_type.name} ({currency}) — {n} instruments")
             try:
-                result = self.market_fetcher.fetch(batch)
+                result = self.fetcher.fetch_market_data(batch)
                 if result:
                     all_results.update(result.items())
 
@@ -198,7 +195,7 @@ class TimescaleProvider(BaseProvider):
         return all_results
 
     def fetch_info_data(self, request: BaseStaticRequest | List[BaseStaticRequest]):
-        return self.info_fetcher.fetch(request)
+        return self.fetcher.fetch_info_data(request)
 
     def healthcheck(self) -> bool:
         if not self.query_ts:

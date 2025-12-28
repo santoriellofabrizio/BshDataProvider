@@ -4,13 +4,13 @@ oracle_provider.py — Unified provider for Oracle-based static and semi-static 
 This module defines the :class:`OracleProvider`, which serves as the unique interface
 between the BSH data framework and Oracle databases. It manages authentication,
 connection setup, and query execution through :class:`QueryOracle` and
-:class:`OracleInfoFetcher`.
+:class:`OracleFetcher`.
 
 Responsibilities:
     - Establish and manage a secure Oracle connection
     - Load connection parameters from environment, singleton, or YAML config
     - Handle Reference, Bulk, Historical, and General static requests
-    - Integrate with the OracleInfoFetcher for higher-level data retrieval
+    - Integrate with the OracleFetcher for higher-level data retrieval
     - Provide direct query access for debugging or validation
 
 Example:
@@ -26,9 +26,8 @@ from core.base_classes.base_provider import BaseProvider
 
 
 from core.requests.requests import BaseStaticRequest, BaseMarketRequest
-from core.utils.common import load_yaml
 from core.utils.config_manager import ConfigManager
-from providers.oracle.fetchers.oracle_info_fetcher import OracleInfoFetcher
+from providers.oracle.oracle_fetcher import OracleFetcher
 from providers.oracle.query_oracle import QueryOracle
 from sfm_dbconnections.DbConnectionParameters import DbConnectionParameters, OracleConnectionParameters
 from sfm_dbconnections.OracleConnection import OracleConnection
@@ -41,7 +40,7 @@ class OracleProvider(BaseProvider):
     Unified provider for Oracle static and semi-static data.
 
     This provider centralizes access to Oracle-based datasets (TER, NAV, PCF, FX, etc.)
-    and delegates data retrieval to the :class:`OracleInfoFetcher`, which groups
+    and delegates data retrieval to the :class:`OracleFetcher`, which groups
     queries into four logical categories:
         - ``fetch_reference()``: for static metadata (ISIN, ticker, TER, etc.)
         - ``fetch_historical()``: for time-dependent values (NAV, dividends2.csv, etc.)
@@ -51,7 +50,7 @@ class OracleProvider(BaseProvider):
     Responsibilities:
         - Load Oracle credentials from environment or YAML configuration
         - Create and manage an active :class:`OracleConnection`
-        - Instantiate :class:`QueryOracle` and :class:`OracleInfoFetcher`
+        - Instantiate :class:`QueryOracle` and :class:`OracleFetcher`
         - Route requests to the proper Oracle fetcher category
         - Expose diagnostic helpers (raw SQL execution and health check)
 
@@ -120,7 +119,7 @@ class OracleProvider(BaseProvider):
 
             # Query manager + fetcher
             self.query = QueryOracle(self.connection)
-            self.fetcher = OracleInfoFetcher(self.query)
+            self.fetcher = OracleFetcher(self.query)
 
         except Exception as e:
             logger.exception(f"❌ Failed to initialize OracleProvider: {e}")
@@ -197,7 +196,7 @@ class OracleProvider(BaseProvider):
     def fetch_market_data(self, requests: Union[BaseMarketRequest, List[BaseMarketRequest]]) -> Dict:
         """
         Le serie storiche Oracle (NAV, dividendi, carry, ecc.) sono
-        coperte da OracleInfoFetcher.fetch_historical().
+        coperte da OracleFetcher.fetch_historical().
         """
         raise NotImplementedError
 

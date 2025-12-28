@@ -3,8 +3,8 @@ bloomberg_provider.py — Unified provider for Bloomberg market and static data.
 
 This module defines the :class:`BloombergProvider`, a unified entry point to access
 Bloomberg data (both market and reference) through the BLPAPI interface. It manages
-the Bloomberg session lifecycle, initializes dedicated fetchers for static and market
-data, and routes requests according to their type and frequency.
+the Bloomberg session lifecycle, initializes a unified fetcher for all data types,
+and routes requests according to their type and frequency.
 
 Responsibilities:
     - Start and manage Bloomberg API sessions
@@ -12,7 +12,7 @@ Responsibilities:
     - Dispatch market data requests (daily, intraday, snapshots)
     - Dispatch static data requests (reference, bulk, historical)
     - Map internal BSH field names to Bloomberg field codes and back
-    - Integrate with :class:`BloombergMarketMarketFetcher` and :class:`BloombergInfoMarketFetcher`
+    - Integrate with :class:`BloombergFetcher` for all data retrieval
 
 Example:
     >>> provider = BloombergProvider(host="localhost", port=8194)
@@ -29,8 +29,7 @@ from typing import List, Dict, Any
 from core.base_classes.base_provider import BaseProvider
 from core.requests.requests import BaseMarketRequest, BaseStaticRequest
 
-from providers.bloomberg.fetchers.bloomberg_info_fetcher import BloombergInfoMarketFetcher
-from providers.bloomberg.fetchers.bloomberg_market_fetcher import BloombergMarketMarketFetcher
+from providers.bloomberg.bloomberg_fetcher import BloombergFetcher
 
 logger = logging.getLogger(__name__)
 
@@ -48,12 +47,11 @@ class BloombergProvider(BaseProvider):
 
     The BloombergProvider coordinates all interactions with Bloomberg via BLPAPI.
     It handles the session setup, service initialization, and routing of both market
-    and static data requests to the appropriate fetchers.
+    and static data requests to a unified fetcher.
 
     Responsibilities:
         - Manage Bloomberg connection and service lifecycle
-        - Dispatch daily, intraday, or snapshot requests to the market fetcher
-        - Dispatch reference, historical, or bulk requests to the info fetcher
+        - Dispatch all request types (daily, intraday, snapshot, reference, historical, bulk)
         - Automatically map field names between internal (BSH) and Bloomberg format
         - Provide a unified interface for Bloomberg as part of the BSH data framework
 
@@ -78,8 +76,7 @@ class BloombergProvider(BaseProvider):
         #
         self.session = self._start_session()
         self.service = self._open_service(self.SERVICE_NAME)
-        self.market_fetcher = BloombergMarketMarketFetcher(self.session, self.service, show_progress)
-        self.info_fetcher = BloombergInfoMarketFetcher(self.session, self.service, show_progress)
+        self.fetcher = BloombergFetcher(self.session, self.service, show_progress)
 
         logger.info("BloombergProvider initialized successfully")
 
@@ -103,14 +100,14 @@ class BloombergProvider(BaseProvider):
             logger.debug("Dispatching Bloomberg snapshot fetch")
             results = {}
             for req in requests:
-                ps = self.market_fetcher.fetch_snapshot(req)
+                ps = self.fetcher.fetch_snapshot(req)
                 results[req.instrument.id] = ps.get(req.instrument.id)
             return results
 
         # === Caso Daily ===
         elif "d" in str(sample.frequency).lower():
             logger.debug("Dispatching Bloomberg daily fetch")
-            return self.market_fetcher.fetch_daily(
+            return self.fetcher.fetch_daily(
                 requests,
                 fields=sample.fields,
                 start=min(r.start for r in requests),
@@ -122,7 +119,7 @@ class BloombergProvider(BaseProvider):
             logger.debug("Dispatching Bloomberg intraday fetch")
             results = {}
             for req in requests:
-                ps = self.market_fetcher.fetch_intraday(req)
+                ps = self.fetcher.fetch_intraday(req)
                 results[req.instrument.id] = ps
             return results
 
@@ -150,18 +147,18 @@ class BloombergProvider(BaseProvider):
         match first_req.request_type:
             # === Dispatch ===
             case "historical":
-                return _rename_fields(self.info_fetcher.fetch_historical_data(
+                return _rename_fields(self.fetcher.fetch_historical_data(
                     subscriptions, _get_bbg_field(fields), start=first_req.start or None,
                     end = first_req.end or None,
                     corr_ids=instrument_list
                 ))
 
             case "reference":
-                return _rename_fields(self.info_fetcher.fetch_reference_data(
+                return _rename_fields(self.fetcher.fetch_reference_data(
                     subscriptions, _get_bbg_field(fields), corr_ids=instrument_list))
 
             case "bulk":
-                return _rename_fields(self.info_fetcher.fetch_bulk_data(
+                return _rename_fields(self.fetcher.fetch_bulk_data(
                     subscriptions, _get_bbg_field(fields), corr_ids=instrument_list, start=first_req.start))
 
 

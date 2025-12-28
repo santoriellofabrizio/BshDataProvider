@@ -10,7 +10,7 @@ from core.holidays.holiday_manager import HolidayManager
 logger = logging.getLogger(__name__)
 
 
-class BaseMarketFetcher:
+class BaseFetcher:
     """Fetcher base con metodi comuni."""
 
     def __init__(self, show_progress=True):
