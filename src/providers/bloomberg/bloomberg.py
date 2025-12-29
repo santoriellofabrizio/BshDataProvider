@@ -34,10 +34,10 @@ from providers.bloomberg.bloomberg_fetcher import BloombergFetcher
 logger = logging.getLogger(__name__)
 
 BSH_TO_BBG = {
-     "TER": "FUND_TOTAL_EXP",
-     "DIVIDEND": "DVD_HIST_ALL",
-     "DIVIDENDS": "DVD_HIST_ALL",
-     "NAV": "FUND_NET_ASSET_VAL"
+    "TER": "FUND_TOTAL_EXP",
+    "DIVIDEND": "DVD_HIST_ALL",
+    "DIVIDENDS": "DVD_HIST_ALL",
+    "NAV": "FUND_NET_ASSET_VAL"
 }
 
 
@@ -149,7 +149,7 @@ class BloombergProvider(BaseProvider):
             case "historical":
                 return _rename_fields(self.fetcher.fetch_historical_data(
                     subscriptions, _get_bbg_field(fields), start=first_req.start or None,
-                    end = first_req.end or None,
+                    end=first_req.end or None,
                     corr_ids=instrument_list
                 ))
 
@@ -160,9 +160,6 @@ class BloombergProvider(BaseProvider):
             case "bulk":
                 return _rename_fields(self.fetcher.fetch_bulk_data(
                     subscriptions, _get_bbg_field(fields), corr_ids=instrument_list, start=first_req.start))
-
-
-
 
     # ============================================================
     # SESSION MANAGEMENT
@@ -189,14 +186,17 @@ class BloombergProvider(BaseProvider):
             logger.info("Closing Bloomberg session")
             self.session.stop()
 
+
 def _get_bsh_field(names):
     if isinstance(names, str): names = [names]
-    bbg_to_bsh = {k:v for v, k in BSH_TO_BBG.items()}
+    bbg_to_bsh = {k: v for v, k in BSH_TO_BBG.items()}
     return [bbg_to_bsh.get(name, name) for name in names]
+
 
 def _get_bbg_field(names):
     if isinstance(names, str): names = [names]
     return [BSH_TO_BBG.get(name, name) for name in names]
+
 
 def _rename_fields(res: dict) -> dict:
     """

@@ -283,7 +283,8 @@ class DividendComponent(Component):
     # UTILITY METHODS - Parsing, validation, normalization
     # ========================================================================
     
-    def _is_intraday_mode(self, dates_dt: List[datetime]) -> bool:
+    @staticmethod
+    def _is_intraday_mode(dates_dt: List[datetime]) -> bool:
         """
         Detect if operating in intraday mode.
         

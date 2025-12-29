@@ -1,6 +1,7 @@
 """
 Adjuster orchestrator for return adjustments.
 """
+from contextlib import contextmanager
 from datetime import date, datetime
 import pandas as pd
 import logging
@@ -10,6 +11,7 @@ from analytics.adjustments.component import Component
 from analytics.adjustments.protocols import InstrumentProtocol
 from analytics.adjustments.return_calculations import ReturnCalculator
 from core.instruments.instrument_factory import InstrumentFactory
+from core.instruments.instruments import Instrument
 
 logger = logging.getLogger(__name__)
 pd.set_option('future.no_silent_downcasting', True)
@@ -17,35 +19,42 @@ pd.set_option('future.no_silent_downcasting', True)
 
 class Adjuster:
     """
-    Orchestrates adjustment calculations across multiple instruments.
+    Orchestrates adjustment calculations with efficient incremental updates.
 
-    NEW Usage - Components own their data:
-        # Components receive their own data
+    Update Modes:
+    -------------
+    1. Append Mode: Permanently store new data and calculate incrementally
+       - Use: append_update(prices=..., fx_prices=..., recalc_last_n=1)
+       - Stores: New prices + new adjustments in cache
+       - Calculates: Only new dates (plus recalc_last_n previous dates)
+
+    2. Live Update Mode: Temporary calculation without storage
+       - Use: live_update(prices=..., fx_prices=...)
+       - Stores: Nothing (all temporary)
+       - Calculates: New dates only, then discards
+       - Returns: Calculated adjustments
+
+    Usage:
+    ------
+        # Setup
         ter = TerComponent(ter_data)
         fx_spot = FxSpotComponent(fx_comp, fx_prices)
-        fx_fwd = FxForwardCarryComponent(fwd_comp, fwd_prices, "1M", fx_prices)
+        adjuster = Adjuster(prices).add(ter).add(fx_spot)
 
-        # Option 1: Individual adds
-        adjuster = (
-            Adjuster(prices)
-            .add(ter)
-            .add(fx_spot)
-            .add(fx_fwd)
+        # Append mode: Store new end-of-day data
+        adjuster.append_update(
+            prices=new_eod_prices,
+            fx_prices=new_fx_prices,
+            recalc_last_n=1  # Recalc last date + new dates
         )
-
-        # Option 2: Component chain (your preferred syntax)
-        adjuster = Adjuster(prices).add_chain(
-            ter.add(
-                fx_spot.add(
-                    fx_fwd.add(
-                        DividendComponent(divs)
-                    )
-                )
-            )
-        )
-
-        # Calculate
         adjustments = adjuster.calculate()
+
+        # Live mode: Intraday updates without storage
+        live_adj = adjuster.live_update(
+            prices=live_prices,
+            fx_prices=live_fx_prices
+        )
+        # Next call uses historical data (live data auto-discarded)
     """
 
     MAX_NUMBER_OF_SIGNIFICANT_DIGITS = 8
@@ -98,9 +107,6 @@ class Adjuster:
         if not self.intraday:
             self._prices.index = self._prices.index.normalize()
 
-        # Temporary prices (for append=False updates)
-        self._temp_prices = None
-
         # Extract instrument IDs
         self.instrument_ids = self._prices.columns.tolist()
 
@@ -127,8 +133,8 @@ class Adjuster:
 
     @property
     def prices(self) -> pd.DataFrame:
-        """Get current prices (temp or permanent)"""
-        return self._temp_prices if self._temp_prices is not None else self._prices
+        """Get current prices"""
+        return self._prices
 
     @staticmethod
     def _validate_and_transpose(df: pd.DataFrame, name: str) -> pd.DataFrame:
@@ -161,7 +167,7 @@ class Adjuster:
 
         return df
 
-    def _fetch_instruments_from_factory(self) -> Dict[str, InstrumentProtocol]:
+    def _fetch_instruments_from_factory(self) -> Dict[str, Instrument]:
         """Fetch instruments from InstrumentFactory."""
         logger.debug(f"Fetching {len(self.instrument_ids)} instruments...")
         factory = InstrumentFactory()
@@ -218,18 +224,6 @@ class Adjuster:
             if not self.intraday:
                 calc_dates = [d.date() if isinstance(d, (datetime, pd.Timestamp)) else d for d in calc_dates]
 
-        # If temp prices are set, calculate fresh (no cache)
-        if self._temp_prices is not None:
-            logger.debug("Adjuster: Using temp prices, bypassing cache")
-            adjustments = self._calculate_for_dates(calc_dates)
-
-            # Clear temp prices and temp component data after use
-            self._temp_prices = None
-            logger.debug("Adjuster: Cleared temp prices after calculation")
-
-            return adjustments
-
-        # Otherwise, use cache
         # Find dates not in cache
         if self._adjustments is None:
             missing_dates = calc_dates
@@ -239,7 +233,8 @@ class Adjuster:
         # Calculate missing dates
         if len(missing_dates) > 0:
             logger.debug(
-                f"Adjuster: Calculating {len(missing_dates)} missing dates (cache hit: {len(calc_dates) - len(missing_dates)})")
+                f"Adjuster: Calculating {len(missing_dates)} missing dates"
+                f" (cache hit: {len(calc_dates) - len(missing_dates)})")
             new_adj = self._calculate_for_dates(missing_dates)
 
             if self._adjustments is None:
@@ -399,100 +394,91 @@ class Adjuster:
                 clean_prices = clean_prices / first_prices
         return clean_prices
 
-    def update(
+    def append_update(
             self,
-            append: bool = False,
             prices: Optional[pd.DataFrame] = None,
-            **kwargs
+            recalc_last_n: int = 1,
+            **component_data
     ) -> 'Adjuster':
         """
-        Update prices and component data (append or temporary).
-
-        IMPORTANT: Provide prices when updating components, as they need
-        new dates to calculate adjustments on.
+        Append new data permanently and calculate incrementally.
 
         Args:
-            append: If True, append to existing data (permanent).
-                   If False, use for next calculation only (temporary).
-            prices: New instrument prices (DataFrame with dates × instruments)
-            **kwargs: Component data (fx_prices, dividends2.csv, etc.)
+            prices: New prices to append (DataFrame with dates × instruments)
+            recalc_last_n: Number of previous dates to recalculate
+                          -1 = full recalculation from start
+                           0 = only new dates
+                           1 = new dates + last stored date (default)
+                           N = new dates + last N stored dates
+            **component_data: Component updates (fx_prices, dividends, etc.)
 
         Returns:
             Self for method chaining
 
         Example:
-            # Permanent update: append new data
-            adjuster.update(
-                append=True,
+            # Append new end-of-day data
+            adjuster.append_update(
+                prices=new_eod_prices,
+                fx_prices=new_fx_prices,
+                recalc_last_n=1
+            )
+
+            # Full recalculation
+            adjuster.append_update(
                 prices=new_prices,
-                fx_prices=new_fx_prices
+                recalc_last_n=-1
             )
 
-            # Temporary update: live data for one calculation
-            adjuster.update(
-                append=False,
-                prices=live_prices,
-                fx_prices=live_fx_prices
-            )
-            result = adjuster.calculate()  # Uses live data
-            result2 = adjuster.calculate()  # Back to permanent data
-
-        Notes:
-            - Registry pattern: O(1) lookup for component updates
-            - Components subscribe via updatable_fields property
+        Workflow:
+            1. Append new prices to permanent storage
+            2. Update components with new data (permanent)
+            3. Determine dates to calculate (new + recalc_last_n)
+            4. Calculate adjustments for those dates
+            5. Update adjustments cache
         """
         # Validate: warn if updating components without prices
-        if kwargs and prices is None and append:
+        if component_data and prices is None:
             logger.warning(
                 "Updating component data without new prices. "
                 "Components may not have dates to calculate on."
             )
 
-        # Handle prices update with proper timestamp
-        new_dates_for_calc = None
+        new_dates = []
+
+        # Handle prices update
         if prices is not None:
             new_prices = self._validate_and_transpose(prices, "prices")
 
-            # Handle case where index is not temporal (e.g., single row with instrument cols)
+            # Handle non-temporal index
             if not isinstance(new_prices.index, pd.DatetimeIndex):
-                # Create timestamp: now() if intraday, today's date otherwise
                 if self.intraday:
                     timestamp = pd.Timestamp.now()
                 else:
                     timestamp = pd.Timestamp.now().normalize()
-
-                # Rebuild with proper timestamp index
                 new_prices.index = [timestamp]
                 logger.debug(f"Adjuster: Non-temporal index detected, using timestamp={timestamp}")
             elif not self.intraday:
                 new_prices.index = new_prices.index.normalize()
 
-            # Align columns with existing instruments (fill missing with last known price)
+            # Align columns
             new_prices = new_prices.reindex(columns=self.instrument_ids, fill_value=None)
 
-            if append:
-                # Get dates that are actually new
-                new_dates_for_calc = new_prices.index.difference(self._prices.index).tolist()
+            # Get truly new dates
+            new_dates = new_prices.index.difference(self._prices.index).tolist()
 
-                # Permanently append new prices
-                self._prices = pd.concat([self._prices, new_prices]).drop_duplicates().sort_index()
-                self._temp_prices = None  # Clear any temp data
-                logger.debug(f"Adjuster: Appended {len(new_dates_for_calc)} new dates (now {len(self._prices)} rows)")
-            else:
-                # Store temporarily for next calculation only
-                self._temp_prices = new_prices
-                logger.debug(f"Adjuster: Temp prices ({len(new_prices)} rows) for next calculation")
+            # Permanently append new prices
+            self._prices = pd.concat([self._prices, new_prices]).drop_duplicates().sort_index()
+            logger.debug(f"Adjuster: Appended {len(new_dates)} new dates (now {len(self._prices)} rows)")
 
-        # Update subscribed components using registry (O(1) lookup)
-        if kwargs:
+        # Update components permanently
+        if component_data:
             updated_components = []
 
-            for field, data in kwargs.items():
-                # O(1) lookup: get components subscribed to this field
+            for field, data in component_data.items():
                 if field in self._subscriptions:
                     for component in self._subscriptions[field]:
                         try:
-                            component.update(append=append, **{field: data})
+                            component.append_data(**{field: data})
                             comp_name = component.__class__.__name__
                             if comp_name not in updated_components:
                                 updated_components.append(comp_name)
@@ -505,25 +491,185 @@ class Adjuster:
                     logger.warning(f"No components subscribed to field '{field}'")
 
             if updated_components:
-                mode = "permanent" if append else "temporary"
-                logger.info(f"Updated components ({mode}): {', '.join(updated_components)}")
+                logger.info(f"Updated components (permanent): {', '.join(updated_components)}")
 
-        # Calculate incremental adjustments for new dates (append mode only)
-        if append and new_dates_for_calc and len(new_dates_for_calc) > 0:
-            logger.debug(f"Adjuster: Calculating adjustments for {len(new_dates_for_calc)} new dates")
+        # Calculate adjustments for new dates (incremental)
+        if new_dates:
+            dates_to_calc = self._get_dates_to_calculate(new_dates, recalc_last_n)
+            logger.debug(f"Adjuster: Calculating adjustments for {len(dates_to_calc)} dates "
+                         f"(new={len(new_dates)}, recalc_last_n={recalc_last_n})")
 
-            new_adjustments = self._calculate_for_dates(new_dates_for_calc)
+            new_adjustments = self._calculate_for_dates(dates_to_calc)
 
-            # Append to existing adjustments
+            # Update cache
             if self._adjustments is None:
                 self._adjustments = new_adjustments
             else:
-                self._adjustments = pd.concat([self._adjustments, new_adjustments])
-                self._adjustments = self._adjustments.sort_index()
+                # Remove old dates that we recalculated
+                if recalc_last_n > 0 or recalc_last_n == -1:
+                    self._adjustments = self._adjustments.loc[~self._adjustments.index.isin(dates_to_calc)]
+
+                self._adjustments = pd.concat([self._adjustments, new_adjustments]).sort_index()
 
             logger.debug(f"Adjuster: Adjustments cache now has {len(self._adjustments)} dates")
 
-        return self  # Enable method chaining
+        return self
+
+    def live_update(
+            self,
+            prices: Optional[pd.DataFrame] = None,
+            **component_data
+    ) -> pd.DataFrame:
+        """
+        Calculate adjustments with live data (no storage).
+
+        Args:
+            prices: Live prices (DataFrame with dates × instruments)
+            **component_data: Live component data (fx_prices, etc.)
+
+        Returns:
+            Adjustments DataFrame (dates × instruments)
+
+        Example:
+            # Intraday update without storage
+            live_adj = adjuster.live_update(
+                prices=live_prices,
+                fx_prices=live_fx_prices
+            )
+            clean_returns = adjuster.clean_returns()  # Uses live data
+
+            # Next call uses historical data (live data auto-discarded)
+            historical = adjuster.calculate()
+
+        Workflow:
+            1. Save current state
+            2. Temporarily apply new data
+            3. Calculate adjustments
+            4. Restore original state
+            5. Return adjustments
+        """
+        with self._live_context(prices=prices, **component_data) as live_dates:
+            # Calculate adjustments for live dates only
+            if live_dates:
+                adjustments = self._calculate_for_dates(live_dates)
+                logger.debug(f"Adjuster: Live calculation for {len(live_dates)} dates (no storage)")
+                return adjustments
+            else:
+                logger.warning("Adjuster: No live dates to calculate")
+                return pd.DataFrame(0.0, index=[], columns=self.instrument_ids)
+
+    def _get_dates_to_calculate(self, new_dates: list, recalc_last_n: int) -> list:
+        """
+        Determine which dates to calculate based on recalc policy.
+
+        Args:
+            new_dates: New dates being added
+            recalc_last_n: Lookback parameter
+                -1: Full recalc (all dates in prices)
+                 0: Only new dates
+                 N: New dates + last N dates from cache
+
+        Returns:
+            List of dates to calculate
+        """
+        if recalc_last_n == -1:
+            # Full recalculation
+            return self._prices.index.tolist()
+
+        if recalc_last_n == 0:
+            # Only new dates
+            return new_dates
+
+        # Partial recalc: new + last N from cache
+        if self._adjustments is None or len(self._adjustments) == 0:
+            # No cache, calculate all new dates
+            return new_dates
+
+        # Get last N dates from cache
+        last_n_dates = self._adjustments.index[-recalc_last_n:].tolist()
+
+        # Combine and deduplicate
+        all_dates = last_n_dates + new_dates
+        return sorted(set(all_dates))
+
+    @contextmanager
+    def _live_context(self, prices=None, **component_data):
+        """
+        Context manager for temporary calculations.
+
+        Saves current state, applies temp data, yields live dates, then restores.
+
+        Args:
+            prices: Temporary prices
+            **component_data: Temporary component data
+
+        Yields:
+            list: Live dates to calculate
+        """
+        # Save state
+        saved_prices = self._prices.copy()
+        saved_adjustments = self._adjustments.copy() if self._adjustments is not None else None
+        saved_component_states = self._save_component_states()
+
+        live_dates = []
+
+        try:
+            # Apply temporary prices
+            if prices is not None:
+                new_prices = self._validate_and_transpose(prices, "prices")
+
+                # Handle non-temporal index
+                if not isinstance(new_prices.index, pd.DatetimeIndex):
+                    if self.intraday:
+                        timestamp = pd.Timestamp.now()
+                    else:
+                        timestamp = pd.Timestamp.now().normalize()
+                    new_prices.index = [timestamp]
+                elif not self.intraday:
+                    new_prices.index = new_prices.index.normalize()
+
+                # Align columns
+                new_prices = new_prices.reindex(columns=self.instrument_ids, fill_value=None)
+
+                # Get live dates (only new ones)
+                live_dates = new_prices.index.tolist()
+
+                # Temporarily extend prices
+                self._prices = pd.concat([self._prices, new_prices]).drop_duplicates().sort_index()
+
+            # Apply temporary component data
+            for field, data in component_data.items():
+                if field in self._subscriptions:
+                    for component in self._subscriptions[field]:
+                        try:
+                            component.apply_temp_data(**{field: data})
+                        except Exception as e:
+                            logger.error(
+                                f"Failed to apply temp data to {component.__class__.__name__}: {e}",
+                                exc_info=True
+                            )
+
+            yield live_dates
+
+        finally:
+            # Restore original state
+            self._prices = saved_prices
+            self._adjustments = saved_adjustments
+            self._restore_component_states(saved_component_states)
+
+    def _save_component_states(self) -> dict:
+        """Save component data states for restoration"""
+        states = {}
+        for comp in self.components:
+            if comp.is_updatable():
+                states[id(comp)] = comp.save_state()
+        return states
+
+    def _restore_component_states(self, states: dict):
+        """Restore component data states"""
+        for comp in self.components:
+            if id(comp) in states:
+                comp.restore_state(states[id(comp)])
 
     def _calculate_for_dates(self, dates: list) -> pd.DataFrame:
         """
@@ -581,7 +727,8 @@ class Adjuster:
                         prices = prices.interpolate(method=fill_method)
                         nan_count_after = prices.isna().sum().sum()
                         logger.info(
-                            f"Adjuster: Interpolated {nan_count_before - nan_count_after} NaN values using '{fill_method}' "
+                            f"Adjuster: Interpolated {nan_count_before - nan_count_after}"
+                            f" NaN values using '{fill_method}' "
                             f"({nan_count_after} NaN remaining)"
                         )
                     except Exception as e:

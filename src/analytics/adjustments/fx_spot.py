@@ -34,14 +34,13 @@ class FxSpotComponent(Component):
     Usage:
         # Initialize
         fx_comp = FxSpotComponent(fx_composition, fx_prices)
+        adjuster = Adjuster(prices).add(fx_comp)
 
-        # Update permanently (append=True)
-        fx_comp.update(append=True, fx_prices=new_fx_prices)
+        # Append mode: permanently add new data
+        adjuster.append_update(fx_prices=new_fx_prices)
 
-        # Update temporarily for next calculation only (append=False)
-        fx_comp.update(append=False, fx_prices=live_fx_prices)
-        result = fx_comp.calculate_adjustment(...)  # Uses live data
-        result2 = fx_comp.calculate_adjustment(...)  # Back to permanent data
+        # Live mode: temporary calculation without storage
+        adjuster.live_update(fx_prices=live_fx_prices)
     """
 
     # Sanity check bounds for composition sum
@@ -66,7 +65,6 @@ class FxSpotComponent(Component):
         # Fill NaN with 0 and validate currencies
         self.fx_composition = fx_composition.fillna(0.0).copy()
         self._fx_prices = normalize_fx_columns(fx_prices)
-        self._temp_fx_prices = None  # For append=False updates
 
         # Validate currency codes
         for ccy in self.fx_composition.columns:
@@ -113,29 +111,15 @@ class FxSpotComponent(Component):
         """Declare updatable fields (subscription model)"""
         return {"fx_prices"}
 
-    @property
-    def fx_prices(self) -> pd.DataFrame:
-        """Get current fx_prices (temp or permanent)"""
-        return self._temp_fx_prices if self._temp_fx_prices is not None else self._fx_prices
-
-    def update(self, append: bool = False, *, fx_prices: Optional[pd.DataFrame] = None) -> None:
+    def append_data(self, *, fx_prices: Optional[pd.DataFrame] = None) -> None:
         """
-        Update component with new FX price data.
+        Append new FX price data permanently.
 
         Args:
-            append: If True, append to existing data (permanent).
-                   If False, use temporarily for next calculation only (then discard)
             fx_prices: New FX price DataFrame (dates × currencies)
 
         Raises:
             ValueError: If fx_prices is invalid (not DataFrame or empty)
-
-        Example:
-            # Permanent update
-            fx_comp.update(append=True, fx_prices=new_fx_data)
-
-            # Temporary update (live data)
-            fx_comp.update(append=False, fx_prices=live_fx_data)
         """
         if fx_prices is None:
             return
@@ -149,15 +133,43 @@ class FxSpotComponent(Component):
         # Normalize columns
         new_fx_prices = normalize_fx_columns(fx_prices)
 
-        if append:
-            # Permanently modify the field
-            self._fx_prices = pd.concat([self._fx_prices, new_fx_prices]).drop_duplicates()
-            self._temp_fx_prices = None  # Clear any temp data
-            logger.debug(f"FxSpotComponent: Appended fx_prices (now {len(self._fx_prices)} rows)")
-        else:
-            # Store temporarily for next calculation only
-            self._temp_fx_prices = new_fx_prices
-            logger.debug(f"FxSpotComponent: Temp fx_prices ({len(new_fx_prices)} rows) for next calculation")
+        # Permanently append
+        # Note: Don't use drop_duplicates() on values, only on index (to remove duplicate timestamps)
+        self._fx_prices = pd.concat([self._fx_prices, new_fx_prices]).sort_index()
+        # Remove duplicate index entries (keep last)
+        self._fx_prices = self._fx_prices[~self._fx_prices.index.duplicated(keep='last')]
+        logger.debug(f"FxSpotComponent: Appended fx_prices (now {len(self._fx_prices)} rows)")
+
+    def save_state(self) -> dict:
+        """Save current state for restoration"""
+        return {'fx_prices': self._fx_prices.copy()}
+
+    def restore_state(self, state: dict) -> None:
+        """Restore saved state"""
+        self._fx_prices = state['fx_prices']
+
+    def apply_temp_data(self, *, fx_prices: Optional[pd.DataFrame] = None, **kwargs) -> None:
+        """
+        Temporarily extend fx_prices without permanent storage.
+
+        Args:
+            fx_prices: Temporary FX price data
+        """
+        if fx_prices is None:
+            return
+
+        # Validate
+        if not isinstance(fx_prices, pd.DataFrame):
+            raise ValueError("fx_prices must be DataFrame")
+        if fx_prices.empty:
+            raise ValueError("fx_prices cannot be empty")
+
+        # Normalize columns
+        new_fx_prices = normalize_fx_columns(fx_prices)
+
+        # Temporarily extend (will be restored by context manager)
+        self._fx_prices = pd.concat([self._fx_prices, new_fx_prices]).drop_duplicates().sort_index()
+        logger.debug(f"FxSpotComponent: Temp fx_prices applied ({len(new_fx_prices)} rows)")
 
     def is_applicable(self, instrument: InstrumentProtocol) -> bool:
         """
@@ -226,15 +238,9 @@ class FxSpotComponent(Component):
             f"FxSpotComponent: Processing {len(applicable_ids)}/{len(instruments)} instruments"
         )
 
-        # 6. Get fx_prices (temp or permanent) and calculate FX returns using return calculator
-        current_fx_prices = self.fx_prices
-        fx_returns = self.return_calculator.calculate_returns(current_fx_prices)
+        # 6. Calculate FX returns using return calculator
+        fx_returns = self.return_calculator.calculate_returns(self._fx_prices)
         fx_returns = fx_returns.where(fx_returns.notna(), 0.0)
-
-        # Clear temp data after use
-        if self._temp_fx_prices is not None:
-            logger.debug("FxSpotComponent: Clearing temp fx_prices after use")
-            self._temp_fx_prices = None
 
         # Ensure dates alignment
         common_dates = fx_returns.index.intersection(dates_dt)

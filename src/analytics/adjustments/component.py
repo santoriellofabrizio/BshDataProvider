@@ -43,7 +43,7 @@ class Component(ABC):
         target: Optional set of instrument IDs to apply adjustments to
         _children: List of child components for builder pattern
     """
-    
+
     def __init__(self, target: Optional[List[str]] = None):
         """
         Initialize component.
@@ -104,15 +104,17 @@ class Component(ABC):
         # Check domain logic first
         if not self.is_applicable(instrument):
             return False
-        
+
         # If no target filter, apply to all applicable
         if self.target is None:
             return True
-        
+
         # Check if in target set
         return instrument.id in self.target
 
-    def validate_input(self, instruments: dict[str, InstrumentProtocol], dates: Union[List[date], List[datetime]], prices: pd.DataFrame) -> None:
+    @staticmethod
+    def validate_input(instruments: dict[str, InstrumentProtocol], dates: Union[List[date], List[datetime]],
+                       prices: pd.DataFrame) -> None:
         """
         Validate input data, raise ValueError if invalid.
 
@@ -134,7 +136,8 @@ class Component(ABC):
         if prices.empty:
             raise ValueError("prices cannot be empty")
 
-    def validate_output(self, result: pd.DataFrame) -> None:
+    @staticmethod
+    def validate_output(result: pd.DataFrame) -> None:
         """
         Validate output data, raise ValueError if invalid.
 
@@ -154,10 +157,10 @@ class Component(ABC):
 
     @abstractmethod
     def calculate_adjustment(
-        self,
-        instruments: dict[str, InstrumentProtocol],
-        dates: Union[List[date], List[datetime]],
-        prices: pd.DataFrame,
+            self,
+            instruments: dict[str, InstrumentProtocol],
+            dates: Union[List[date], List[datetime]],
+            prices: pd.DataFrame,
     ) -> pd.DataFrame:
         """
         Calculate adjustments (vectorized).
@@ -252,7 +255,6 @@ class Component(ABC):
         logger.debug(f"{self.__class__.__name__}.add({component.__class__.__name__})")
         return self  # Return parent for chaining
 
-
     # ========================================================================
     # UTILITY METHODS
     # ========================================================================
@@ -279,7 +281,7 @@ class Component(ABC):
                 result = pd.DataFrame(0.0, index=dates_dt, columns=...)
         """
         normalized = []
-        
+
         for d in dates:
             if isinstance(d, datetime):
                 normalized.append(d)
@@ -293,26 +295,75 @@ class Component(ABC):
                     f"Expected date or datetime, got {type(d)}. "
                     "All dates must be date or datetime objects."
                 )
-        
+
         return normalized
 
-    def update(self, append: bool = False, **kwargs) -> None:
+    def append_data(self, **kwargs) -> None:
         """
-        Update component with new data.
+        Append new data permanently (implemented by updatable components).
 
-        Base implementation: no-op (components are stateless by default).
+        Base implementation: no-op (components without updatable data).
         Override in updatable components with explicit parameters.
 
         Args:
-            append: If True, append to existing data (permanent).
-                   If False, use temporarily for next calculation only.
-            **kwargs: Component-specific data (for compatibility)
+            **kwargs: Component-specific data
 
         Example:
-            # In FxSpotComponent - explicit signature
-            def update(self, append: bool = False, *, fx_prices: Optional[pd.DataFrame] = None):
+            # In FxSpotComponent
+            def append_data(self, *, fx_prices: Optional[pd.DataFrame] = None):
                 if fx_prices is not None:
-                    # validate and update
+                    self._fx_prices = pd.concat([self._fx_prices, fx_prices])
+        """
+        pass
+
+    def save_state(self) -> dict:
+        """
+        Save current state for restoration (implemented by updatable components).
+
+        Used by Adjuster's live_update context manager to save/restore state.
+
+        Returns:
+            dict: Saved state (component-specific structure)
+
+        Example:
+            # In FxSpotComponent
+            def _save_state(self) -> dict:
+                return {'fx_prices': self._fx_prices.copy()}
+        """
+        return {}
+
+    def restore_state(self, state: dict) -> None:
+        """
+        Restore saved state (implemented by updatable components).
+
+        Used by Adjuster's live_update context manager to restore original state.
+
+        Args:
+            state: Previously saved state from _save_state()
+
+        Example:
+            # In FxSpotComponent
+            def _restore_state(self, state: dict) -> None:
+                self._fx_prices = state['fx_prices']
+        """
+        pass
+
+    def apply_temp_data(self, **kwargs) -> None:
+        """
+        Temporarily modify data without permanent storage.
+
+        Used by Adjuster's live_update context manager to apply temporary data.
+        State will be automatically restored after calculation.
+
+        Args:
+            **kwargs: Component-specific temporary data
+
+        Example:
+            # In FxSpotComponent
+            def _apply_temp_data(self, *, fx_prices: Optional[pd.DataFrame] = None):
+                if fx_prices is not None:
+                    # Temporarily extend fx_prices
+                    self._fx_prices = pd.concat([self._fx_prices, fx_prices])
         """
         pass
 

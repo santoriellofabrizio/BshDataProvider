@@ -101,7 +101,8 @@ class FxForwardCarryComponent(Component):
             if missing_data:
                 logger.warning(
                     f"FxForwardCarryComponent: Target contains {len(missing_data)} instruments "
-                    f"without FX forward composition: {sorted(missing_data)[:5]}{'...' if len(missing_data) > 5 else ''}. "
+                    f"without FX forward composition: {sorted(missing_data)[:5]}"
+                    f"{'...' if len(missing_data) > 5 else ''}. "
                     "These will receive zero FX forward carry adjustments."
                 )
 
@@ -525,6 +526,98 @@ class FxForwardCarryComponent(Component):
         )
         
         return rate_diffs
+
+    # ========================================================================
+    # UPDATABLE INTERFACE - Support for progressive data updates
+    # ========================================================================
+
+    def is_updatable(self) -> bool:
+        """This component supports data updates"""
+        return True
+
+    @property
+    def updatable_fields(self) -> set[str]:
+        """Declare updatable fields (subscription model)"""
+        return {"fx_forward_prices", "fx_prices"}
+
+    def append_data(
+        self,
+        *,
+        fx_forward_prices: Optional[pd.DataFrame] = None,
+        fx_prices: Optional[pd.DataFrame] = None
+    ) -> None:
+        """
+        Append new FX forward and/or spot price data permanently.
+
+        Args:
+            fx_forward_prices: New FX forward price DataFrame (dates × currencies)
+                              in BASIS POINTS format
+            fx_prices: New FX spot price DataFrame (dates × currencies)
+
+        Raises:
+            ValueError: If data is invalid (not DataFrame or empty)
+        """
+        if fx_forward_prices is not None:
+            # Validate
+            if not isinstance(fx_forward_prices, pd.DataFrame):
+                raise ValueError("fx_forward_prices must be DataFrame")
+            if fx_forward_prices.empty:
+                raise ValueError("fx_forward_prices cannot be empty")
+
+            # Normalize columns
+            new_fx_fwd = self._normalize_fx_columns(fx_forward_prices, "forward")
+
+            # Transform (annualize and convert from bp)
+            new_fx_fwd_transformed = self._transform_fx_forward_prices(new_fx_fwd, self.tenor)
+
+            # Permanently append
+            # Note: Don't use drop_duplicates() on values, only on index (to remove duplicate timestamps)
+            self.fx_forward_prices = pd.concat(
+                [self.fx_forward_prices, new_fx_fwd_transformed]
+            ).sort_index()
+            # Remove duplicate index entries (keep last)
+            self.fx_forward_prices = self.fx_forward_prices[~self.fx_forward_prices.index.duplicated(keep='last')]
+
+            logger.debug(
+                f"FxForwardCarryComponent: Appended fx_forward_prices "
+                f"(now {len(self.fx_forward_prices)} rows)"
+            )
+
+        if fx_prices is not None:
+            # Validate
+            if not isinstance(fx_prices, pd.DataFrame):
+                raise ValueError("fx_prices must be DataFrame")
+            if fx_prices.empty:
+                raise ValueError("fx_prices cannot be empty")
+
+            # Normalize columns
+            new_fx_spot = self._normalize_fx_columns(fx_prices, "spot")
+
+            # Permanently append
+            # Note: Don't use drop_duplicates() on values, only on index (to remove duplicate timestamps)
+            self.fx_spot_prices = pd.concat(
+                [self.fx_spot_prices, new_fx_spot]
+            ).sort_index()
+            # Remove duplicate index entries (keep last)
+            self.fx_spot_prices = self.fx_spot_prices[~self.fx_spot_prices.index.duplicated(keep='last')]
+
+            logger.debug(
+                f"FxForwardCarryComponent: Appended fx_prices "
+                f"(now {len(self.fx_spot_prices)} rows)"
+            )
+
+    def save_state(self) -> dict:
+        """Save current state for restoration (used by live_update)"""
+        return {
+            'fx_forward_prices': self.fx_forward_prices.copy(),
+            'fx_spot_prices': self.fx_spot_prices.copy()
+        }
+
+    def restore_state(self, state: dict) -> None:
+        """Restore saved state (used by live_update)"""
+        self.fx_forward_prices = state['fx_forward_prices'].copy()
+        self.fx_spot_prices = state['fx_spot_prices'].copy()
+        logger.debug("FxForwardCarryComponent: State restored")
 
     def __repr__(self) -> str:
         return (
