@@ -98,11 +98,7 @@ class BloombergProvider(BaseProvider):
         # === Caso Snapshot (con snapshot_time) ===
         if getattr(sample, "snapshot_time", None):
             logger.debug("Dispatching Bloomberg snapshot fetch")
-            results = {}
-            for req in requests:
-                ps = self.fetcher.fetch_snapshot(req)
-                results[req.instrument.id] = ps.get(req.instrument.id)
-            return results
+            return self.fetcher.fetch_snapshot(requests)
 
         # === Caso Daily ===
         elif "d" in str(sample.frequency).lower():
@@ -120,39 +116,115 @@ class BloombergProvider(BaseProvider):
 
     def fetch_info_data(self, requests: List[BaseStaticRequest]) -> None | dict | dict[Any, Any]:
         """
-            Esegue richieste statiche Bloomberg (TER, YAS, DIVIDENDS o altri campi statici).
-            Riconosce automaticamente se serve Reference o Historical.
-            """
+        Esegue richieste statiche Bloomberg (TER, YAS, DIVIDENDS o altri campi statici).
+
+        Flow:
+        1. Aliasa i field di ogni richiesta: BSH → Bloomberg
+        2. Passa le richieste aliasate all'handler
+        3. Riceve i risultati con field Bloomberg
+        4. Rimappa i field indietro: Bloomberg → BSH
+        """
         if not requests:
             logger.warning("Empty static request list passed to BloombergProvider")
             return {}
 
-        # === Preparazione batch ===
-        instruments = {req.instrument.id: req.instrument for req in requests}
-        instrument_list = list(instruments.keys())
-        id_map = {req.subscription: req.instrument.id for req in requests if getattr(req, "subscription", None)}
-        subscriptions = list(id_map.keys())
-        if not instruments:
-            return {}
+        # === Aliasa i field: BSH → Bloomberg ===
+        aliased_requests = self._alias_request_fields(requests)
 
-        first_req = requests[0]
-        fields = [f.upper() for f in
-                  (first_req.fields if isinstance(first_req.fields, list) else [first_req.fields])]
-        # === Determina tipo richiesta ===
+        first_req = aliased_requests[0]
+
+        logger.info("Processing %d static requests (type=%s)",
+                   len(aliased_requests), first_req.request_type)
+
+        # === Dispatch all'handler con richieste aliasate ===
         match first_req.request_type:
-            # === Dispatch ===
-            case "historical":
-                return _rename_fields(self.fetcher.fetch_historical_data(
-                    subscriptions, _get_bbg_field(fields), start=first_req.start or None,
-                    end=first_req.end or None,
-                    corr_ids=instrument_list
-                ))
-
             case "reference":
-                return _rename_fields(self.fetcher.fetch_reference_data(requests))
-
+                raw_data = self.fetcher.fetch_reference_data(aliased_requests)
+            case "historical":
+                raw_data = self.fetcher.fetch_historical_data(aliased_requests)
             case "bulk":
-                return _rename_fields(self.fetcher.fetch_bulk_data(requests))
+                raw_data = self.fetcher.fetch_bulk_data(aliased_requests)
+            case _:
+                logger.error("Unknown request type: %s", first_req.request_type)
+                return {}
+
+        # === Rimappa i field: Bloomberg → BSH ===
+        return self._remap_fields_from_bloomberg(raw_data)
+
+
+    def _alias_request_fields(self, requests: List[BaseStaticRequest]) -> List[BaseStaticRequest]:
+        """
+        Crea copie delle richieste con field aliasati: BSH → Bloomberg.
+
+        Non modifica le richieste originali.
+
+        Args:
+            requests: Richieste con field BSH
+
+        Returns:
+            Copie delle richieste con field Bloomberg
+        """
+        from copy import deepcopy
+
+        aliased = []
+        for req in requests:
+            req_copy = deepcopy(req)
+
+            # Aliasa i field
+            if isinstance(req_copy.fields, str):
+                req_copy.fields = [_get_bbg_field(req_copy.fields)[0]]
+            elif isinstance(req_copy.fields, list):
+                req_copy.fields = _get_bbg_field(req_copy.fields)
+
+            logger.debug("Aliased request for %s: %s → %s",
+                        req_copy.instrument.id, req.fields, req_copy.fields)
+
+            aliased.append(req_copy)
+
+        return aliased
+
+    def _remap_fields_from_bloomberg(self, raw_data: dict) -> dict:
+        """
+        Rimappa i field dai codici Bloomberg ai nomi BSH.
+
+        Input format:
+            {instrument_id: {bbg_field: value_or_timeseries}}
+
+        Output format:
+            {instrument_id: {bsh_field: value_or_timeseries}}
+
+        Args:
+            raw_data: Dati con field Bloomberg
+
+        Returns:
+            Dati con field BSH
+        """
+        if not raw_data:
+            return raw_data
+
+        # Inverti la mappatura: Bloomberg → BSH
+        bbg_to_bsh = {v: k for k, v in BSH_TO_BBG.items()}
+
+        remapped = {}
+        for instr_id, fields_data in raw_data.items():
+            if not isinstance(fields_data, dict):
+                remapped[instr_id] = fields_data
+                continue
+
+            remapped_fields = {}
+            for bbg_field, value in fields_data.items():
+                # Rimappa il field
+                bsh_field = bbg_to_bsh.get(bbg_field, bbg_field)
+                remapped_fields[bsh_field] = value
+
+                if bsh_field != bbg_field:
+                    logger.debug("Remapped %s → %s for %s",
+                               bbg_field, bsh_field, instr_id)
+
+            remapped[instr_id] = remapped_fields
+
+        return remapped
+
 
     # ============================================================
     # SESSION MANAGEMENT

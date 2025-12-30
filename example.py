@@ -15,8 +15,8 @@ from interface.bshdata import BshData
 
 
 def adjustment(start):
-    etf_tickers = ["IUSE","IUSA"]
-    start = "2025-11-01"
+    etf_tickers = ["XMAW","XMAE"]
+    start = "2025-12-13"
 
     api = BshData(autocomplete=True)
     factory = InstrumentFactory()

@@ -3,6 +3,7 @@
 import pytest
 from dateutil.utils import today
 
+from core.enums.instrument_types import InstrumentType
 from interface.bshdata import BshData
 
 
@@ -157,7 +158,7 @@ def test_bloomberg_daily_etf(api: BshData):
 
 def test_bloomberg_nav(api: BshData):
     print("\n========== TEST BLOOMBERG NAV ==========")
-    nav = api.info.get()
+    nav = api.info.get_nav(id = ISIN_LIST, start='2025-12-11')
     df = pd.DataFrame.from_dict(nav)
     print(f"Fetched {len(df)} NAV rows for IHYG")
     print(df.head(10).to_string(index=True))
@@ -168,7 +169,9 @@ def test_bloomberg_nav(api: BshData):
 
 def test_bloomberg_swap(api: BshData):
     print("\n========== TEST BLOOMBERG NAV ==========")
-    nav = api.market.get(id_=["EUZCISWAP1", "EUZCISWAP10"])
+    nav = api.market.get(id=["EUZCISWAP1", "EUZCISWAP10"],
+                         fields="MID", source="bloomberg",
+                         type=InstrumentType.SWAP, start='2025-12-11')
     df = pd.DataFrame.from_dict(nav)
     print(f"Fetched {len(df)} MID rows for EUZCISWAP1")
     print(df.head(10).to_string(index=True))
@@ -178,22 +181,4 @@ def test_bloomberg_swap(api: BshData):
     assert not df.empty
 
 
-def test_generic_historical(api: BshData):
-    print("\n========== TEST BLOOMBERG HISTORICAL ==========")
-    df = api.market.get()
-    print(f"Fetched {len(df)} PX_LAST rows for IHYG")
-    print(df.head(10).to_string(index=True))
-    print("==============================================\n")
 
-    assert not df.empty
-
-
-def test_cdx_market(api: BshData):
-    print("\n========== TEST BLOOMBERG HISTORICAL ==========")
-    df = api.market.get()
-
-    print(f"Fetched {len(df)} MID rows for ITXEB5")
-    print(df.head(10).to_string(index=True))
-    print("==============================================\n")
-
-    assert not df.empty

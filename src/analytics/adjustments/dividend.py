@@ -386,7 +386,7 @@ class DividendComponent(Component):
             return amount
 
         # Find column (case-insensitive)
-        col = next((c for c in fx_prices.columns if str(c).upper() == ccy), None)
+        col = next((c for c in fx_prices.columns if str(c).upper() == ccy or str(c).upper() == f"EUR{ccy}"), None)
 
         if col is None:
             logger.debug(f"DividendComponent: No FX rate for {ccy}")
