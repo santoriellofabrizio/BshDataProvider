@@ -122,14 +122,14 @@ def normalize_fx_columns(fx_prices: pd.DataFrame) -> pd.DataFrame:
         # Case 3: 3-char currency code (USD, GBP, etc.)
         elif len(col_str) == 3:
             normalized_columns[col] = col_str
-            logger.warning(
+            logger.info(
                 f"FX column '{col}' is a currency code without EUR base indication. "
                 f"Assuming it represents EUR{col} (e.g., EUR/{col} rate)."
             )
 
         # Case 4: Other formats - warn and keep as-is
         else:
-            logger.warning(
+            logger.info(
                 f"FX column '{col}' doesn't match expected format (EURCCY, CCYEUR, or CCY). "
                 "Keeping as-is."
             )

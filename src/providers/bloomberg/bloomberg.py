@@ -107,12 +107,7 @@ class BloombergProvider(BaseProvider):
         # === Caso Daily ===
         elif "d" in str(sample.frequency).lower():
             logger.debug("Dispatching Bloomberg daily fetch")
-            return self.fetcher.fetch_daily(
-                requests,
-                fields=sample.fields,
-                start=min(r.start for r in requests),
-                end=max(r.end for r in requests)
-            )
+            return self.fetcher.fetch_daily(requests)
 
         # === Caso Intraday ===
         else:

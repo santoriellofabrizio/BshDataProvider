@@ -148,7 +148,7 @@ class FxSpotComponent(Component):
         """Restore saved state"""
         self._fx_prices = state['fx_prices']
 
-    def apply_temp_data(self, *, fx_prices: Optional[pd.DataFrame] = None, **kwargs) -> None:
+    def apply_temp_data(self, *, fx_prices: Optional[pd.DataFrame | pd.Series] = None, **kwargs) -> None:
         """
         Temporarily extend fx_prices without permanent storage.
 
@@ -157,6 +157,10 @@ class FxSpotComponent(Component):
         """
         if fx_prices is None:
             return
+
+        if isinstance(fx_prices, pd.Series):
+            ts = pd.Timestamp.now() if self.is_intraday else pd.Timestamp.now().normalize()
+            fx_prices = fx_prices.to_frame(ts).T
 
         # Validate
         if not isinstance(fx_prices, pd.DataFrame):

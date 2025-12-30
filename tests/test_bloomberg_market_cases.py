@@ -153,24 +153,6 @@ def test_bloomberg_daily_etf(api: BshData):
     print(df)
     assert df is not None
 
-def test_bloomberg_yas(api: BshData):
-    print("\n========== TEST BLOOMBERG YAS ==========")
-    yas = api.info.get()
-    df = yas
-    print(f"Fetched {len(df)} rows for YAS_YLD_SPREAD on IHYG")
-    print(df.head(10).to_string(index=True))
-    print("=======================================\n")
-
-    assert yas is not None
-    assert not df.empty
-
-def test_bloomberg_active_future(api: BshData):
-
-    import datetime as dt
-    res = api.info.get(id_=["FBTP", "FBTS"])
-
-    a = 0
-
 
 
 def test_bloomberg_nav(api: BshData):

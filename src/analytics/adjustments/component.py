@@ -55,6 +55,7 @@ class Component(ABC):
         self.target = set(target) if target is not None else None
         self._children: List['Component'] = []  # For builder pattern
         self._return_calculator: Optional['ReturnCalculator'] = None  # Injected by Adjuster
+        self.is_intraday = None
 
     def is_updatable(self) -> bool:
         """

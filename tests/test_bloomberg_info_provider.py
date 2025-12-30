@@ -149,7 +149,7 @@ def test_bloomberg_yas(api: BshData):
 
 def test_bloomberg_dividends(api: BshData):
     print("\n========== TEST BLOOMBERG DIVIDENDS ==========")
-    dvd = api.info.get_dividends(type="ETP", isin="IE00B66F4759", start="2024-10-01", source="bloomberg")
+    dvd = api.info.get_dividends(isin="IE00B66F4759", start="2024-10-01", source="bloomberg")
     print(f"Fetched {len(dvd)} dividend rows for IE00B66F4759")
     print(dvd.head(10).to_string(index=True))
     print("==============================================\n")
@@ -168,14 +168,8 @@ def test_bloomberg_nav(api: BshData):
     assert nav is not None
     assert not nav.empty
 
+def test_ter(api: BshData):
+    ter = api.info.get_ter(ISIN_LIST)
+    assert len(ter) > 0
 
-def test_generic_historical(api: BshData):
-    print("\n========== TEST BLOOMBERG HISTORICAL ==========")
-    px = api.market.get()
-    df = pd.DataFrame.from_dict(px)
-    print(f"Fetched {len(df)} PX_LAST rows for IHYG")
-    print(df.head(10).to_string(index=True))
-    print("==============================================\n")
 
-    assert px is not None
-    assert not df.empty

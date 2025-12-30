@@ -193,6 +193,7 @@ class Adjuster:
         """
         # Inject return calculator into component
         component.set_return_calculator(self.return_calculator)
+        component.is_intraday = self.intraday
 
         self.components.append(component)
 
@@ -282,6 +283,9 @@ class Adjuster:
     def clean_returns(
             self,
             dates: Union[list[date], list[datetime], None] = None,
+            cumulative: bool = False,
+            live_prices: Optional[pd.DataFrame | pd.Series] = None,
+            **live_component_data,
     ) -> pd.DataFrame:
         """
         Calculate clean returns by applying adjustments to raw returns.
@@ -294,12 +298,49 @@ class Adjuster:
 
         Args:
             dates: Optional subset of dates to calculate for
+            cumulative: If True, return forward cumulative returns (from each date T to end)
+            live_prices: Optional live prices for temporary calculation (no storage)
+            live_component_data: Optional live component data (fx_prices, dividends, etc.) for temporary calculation
 
         Returns:
-            DataFrame(dates × instruments) with clean returns
-        """
+            DataFrame(dates × instruments) with clean returns (forward cumulative if specified)
 
-        # Use return calculator for consistent return calculation
+        Example:
+            # Standard calculation with historical data
+            clean = adjuster.clean_returns()
+
+            # Live calculation with intraday prices
+            live_clean = adjuster.clean_returns(
+                live_prices=live_prices,
+                live_component_data={'fx_prices': fx_live}
+            )
+        """
+        # Handle live updates
+        if live_prices is not None or live_component_data:
+            if isinstance(live_prices, pd.Series):
+                ts = pd.Timestamp.now() if self.intraday else pd.Timestamp.now().normalize()
+                live_prices = live_prices.to_frame(ts).T
+            live_component_data = live_component_data or {}
+            with self._live_context(prices=live_prices, **live_component_data) as live_dates:
+                # Calculate with live data
+                raw_returns = self.return_calculator.calculate_returns(self.prices)
+                adjustments = self.calculate(dates)
+                if dates is not None:
+                    raw_returns = raw_returns.loc[dates]
+
+                cleaned = raw_returns.add(
+                    adjustments.reindex(raw_returns.index, columns=raw_returns.columns),
+                    fill_value=0.0
+                )
+
+                cleaned.iloc[0] = 0.0
+
+                if cumulative:
+                    cleaned = (1 + cleaned).iloc[::-1].cumprod().iloc[::-1] - 1
+
+                return cleaned
+
+        # Standard path: use historical data
         raw_returns = self.return_calculator.calculate_returns(self.prices)
         adjustments = self.calculate(dates)
         if dates is not None:
@@ -313,6 +354,9 @@ class Adjuster:
         # Ensure first return is always 0 (first price has no previous price for return calculation)
         # This aligns with return calculator behavior and ensures clean price reconstruction works correctly
         cleaned.iloc[0] = 0.0
+
+        if cumulative:
+            cleaned = (1 + cleaned).iloc[::-1].cumprod().iloc[::-1] - 1
 
         return cleaned
 
@@ -517,7 +561,7 @@ class Adjuster:
 
     def live_update(
             self,
-            prices: Optional[pd.DataFrame] = None,
+            prices: Optional[pd.DataFrame | pd.Series] = None,
             **component_data
     ) -> pd.DataFrame:
         """
@@ -548,6 +592,10 @@ class Adjuster:
             4. Restore original state
             5. Return adjustments
         """
+        if isinstance(prices, pd.Series):
+            ts = pd.Timestamp.now() if self.intraday else pd.Timestamp.now().normalize()
+            prices = prices.to_frame(ts).T
+
         with self._live_context(prices=prices, **component_data) as live_dates:
             # Calculate adjustments for live dates only
             if live_dates:

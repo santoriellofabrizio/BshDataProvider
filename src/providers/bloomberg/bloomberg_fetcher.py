@@ -20,7 +20,7 @@ Responsibilities:
 Example:
     >>> fetcher = BloombergFetcher(session)
     >>> ref = fetcher.fetch_reference_data(["IHYG IM Equity"], ["FUND_TOTAL_EXP"], ["IHYG"])
-    >>> daily = fetcher.fetch_daily(requests, ["PX_LAST"], start, end)
+    >>> daily = fetcher.fetch_daily(requests)
 """
 
 import logging
@@ -209,7 +209,7 @@ class BloombergFetcher(BaseFetcher):
     # ============================================================
 
     @cache_bsh_data
-    def fetch_daily(self, requests: List, fields: List[str], start: datetime, end: datetime) -> dict:
+    def fetch_daily(self, requests: List) -> dict:
         """
         Fetch daily market data for multiple instruments.
 

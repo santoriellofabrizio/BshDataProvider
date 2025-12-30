@@ -10,6 +10,18 @@ from core.requests.requests import BaseRequest
 logger = logging.getLogger(__name__)
 
 
+def _clone_request_with_fields(req: BaseRequest, fields: List[str]) -> BaseRequest:
+    """
+    Clone a request with a different set of fields.
+
+    This is needed when some fields are handled and others need to go downstream.
+    """
+    import copy
+    req_copy = copy.copy(req)
+    req_copy.fields = fields
+    return req_copy
+
+
 class Handler(ABC):
     """
     Base handler for Chain of Responsibility pattern.
@@ -101,7 +113,7 @@ class Handler(ABC):
                 for field, submap in normalized.items():
                     ufield = field.upper()
                     if ufield in req_fields:
-                        val = submap.get(req_id)
+                        val = submap.get(req_id) or submap.get(sub)
                         results[req_id][ufield] = val
                         handled_fields.add(ufield)
 
@@ -114,7 +126,7 @@ class Handler(ABC):
                 # If some fields are still missing/None, forward to next handler
                 missing = {f for f in req_fields if results[req_id].get(f) is None}
                 if missing:
-                    req_copy = self._clone_request_with_fields(req, list(missing))
+                    req_copy = _clone_request_with_fields(req, list(missing))
                     downstream_requests.append(req_copy)
 
         # ============================================================
@@ -186,17 +198,6 @@ class Handler(ABC):
                 logger.warning(f"Expected dict for subscription '{sub}', got {type(fieldmap)}")
 
         return normalized
-
-    def _clone_request_with_fields(self, req: BaseRequest, fields: List[str]) -> BaseRequest:
-        """
-        Clone a request with a different set of fields.
-
-        This is needed when some fields are handled and others need to go downstream.
-        """
-        import copy
-        req_copy = copy.copy(req)
-        req_copy.fields = fields
-        return req_copy
 
     @abstractmethod
     def can_handle(self, req: BaseRequest) -> bool:

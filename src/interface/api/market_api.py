@@ -369,7 +369,7 @@ class MarketDataAPI(BaseAPI):
             **extra_params,
         )
         result = self._dispatch(**dispatch_params, fallbacks=fallbacks)
-        return self._aggregate(result)
+        return self._aggregate(result).sort_index()
 
     def get_fx_forward_prices(self,
                               quoted_currency: list[str] | str,

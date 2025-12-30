@@ -204,6 +204,9 @@ class BloombergSnapshotPriceHandler(IntradayPriceHandler, BaseFetcher):
                         if bars:
                             # Find bar closest to snapshot time
                             nearest_time = min(bars.keys(), key=lambda t: abs(t - snap_dt))
+                            _day = day.date()
+                            if self.holidays.is_holiday(_day):
+                                continue
                             values[day.date()] = bars[nearest_time]
                         else:
                             logger.debug("No bars returned for %s on %s", msg_corr_id, day)

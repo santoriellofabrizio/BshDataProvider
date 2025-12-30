@@ -237,6 +237,7 @@ class InfoDataAPI(BaseAPI):
             market: Optional[Union[str, List[str], Dict[str, str]]] = None,
             currency: Union[str, List[str], Dict[str, str]] = "EUR",
             autocomplete: Optional[bool] = None,
+            fields: Optional[List[str]] = None,
             **kwargs,
     ):
         """
@@ -279,7 +280,7 @@ class InfoDataAPI(BaseAPI):
         # Separate instrument-building params from request params
         instrument_build_params = {
             k: v for k, v in kwargs.items()
-            if k not in ['fields', 'source', 'subscriptions', 'request_type', 'fallbacks']
+            if k not in ['source', 'subscriptions', 'request_type', 'fallbacks']
         }
 
         instruments = [
@@ -291,7 +292,7 @@ class InfoDataAPI(BaseAPI):
             for i in range(n)
         ]
 
-        return self.get_with_instruments(instruments=instruments, **kwargs)
+        return self.get_with_instruments(instruments=instruments, fields=fields, **kwargs)
 
     def get_with_instruments(
             self,
@@ -628,14 +629,14 @@ class InfoDataAPI(BaseAPI):
         """Get stock fields."""
         return self.get(
             "STOCK",
-            id,
-            isin,
-            ticker,
-            market,
-            source,
-            fields,
-            currency,
-            subscriptions,
+            id=id,
+            isin=isin,
+            ticker=ticker,
+            market=market,
+            source=source,
+            fields=fields,
+            currency=currency,
+            subscriptions=subscriptions,
             **kwargs
         )
 
@@ -648,16 +649,17 @@ class InfoDataAPI(BaseAPI):
             currency: Union[str, List[str]] = None,
             **kwargs
     ):
-        """Get stock markets info."""
         results = self.get(
             "STOCK",
             id,
             isin,
             ticker,
             None,
-            source,
-            "STOCK_MARKETS_INFO",
+            None,
             currency,
+            fields=["STOCK_MARKETS_INFO"],
+            source=source,
             **kwargs
         )
+        """Get stock markets info."""
         return results.drop("ISIN", axis=1, errors="ignore")
