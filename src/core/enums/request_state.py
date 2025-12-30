@@ -6,8 +6,8 @@ durante il suo ciclo di vita nel sistema BSH Data Provider.
 """
 
 from enum import Enum
-import math
 from typing import Set, Any, Dict
+import math
 
 
 class RequestState(Enum):
@@ -164,13 +164,43 @@ class RequestState(Enum):
 # Data Quality Evaluation
 # ============================================================
 
+def is_none_or_nan(value: Any) -> bool:
+    """
+    Check if a value is None or NaN.
+
+    Args:
+        value: Value to check
+
+    Returns:
+        True if value is None or NaN, False otherwise
+
+    Examples:
+        >>> is_none_or_nan(None)
+        True
+        >>> is_none_or_nan(float('nan'))
+        True
+        >>> is_none_or_nan(0)
+        False
+        >>> is_none_or_nan("test")
+        False
+    """
+    if value is None:
+        return True
+
+    # Check for NaN (works for both float('nan') and numpy/pandas nan)
+    try:
+        return math.isnan(value)
+    except (TypeError, ValueError):
+        # Not a numeric type, so can't be NaN
+        return False
+
+
 def is_value_empty(value: Any) -> bool:
     """
     Determina se un valore è considerato "vuoto" (no dati utili).
 
     Vuoto significa:
-        - None
-        - NaN (float o numpy)
+        - None or NaN
         - Lista/dict vuoti
         - Lista/dict con solo valori None/NaN
         - Time series con tutti i valori None/NaN
@@ -195,35 +225,23 @@ def is_value_empty(value: Any) -> bool:
         >>> is_value_empty([{"date": "2024-01-01", "value": 100.5}])
         False
     """
-    if value is None:
+    if is_none_or_nan(value):
         return True
-
-    # Gestisci NaN per float e numpy
-    if isinstance(value, float) and math.isnan(value):
-        return True
-    
-    # Gestisci numpy.nan (se numpy è presente)
-    try:
-        import numpy as np
-        if isinstance(value, (np.floating, np.integer)) and np.isnan(value):
-            return True
-    except (ImportError, TypeError):
-        pass
 
     if isinstance(value, (list, tuple)):
         if len(value) == 0:
             return True
         # Controlla se è una time series (lista di dict con 'value')
         if all(isinstance(item, dict) for item in value):
-            # Time series: controlla se tutti i 'value' sono None
+            # Time series: controlla se tutti i 'value' sono None/NaN
             values = [item.get('value') for item in value if 'value' in item]
-            if values and all(v is None for v in values):
+            if values and all(is_none_or_nan(v) for v in values):
                 return True
             # Se nessun item ha 'value', controlla ricorsivamente
             if not values:
                 return all(is_value_empty(item) for item in value)
         else:
-            # Lista normale: tutti None?
+            # Lista normale: tutti None/NaN?
             return all(is_value_empty(item) for item in value)
 
     if isinstance(value, dict):
@@ -240,21 +258,19 @@ def is_value_empty(value: Any) -> bool:
 def evaluate_result_quality(result_data: Dict[str, Any]) -> Dict[str, bool]:
     """
     Valuta la qualità di ogni field in un risultato.
-    
-    Le chiavi vengono normalizzate a UPPERCASE per consistenza.
 
     Args:
         result_data: Dizionario {field_name: value}
 
     Returns:
-        Dizionario {FIELD_NAME: has_valid_data} (chiavi uppercase)
+        Dizionario {field_name: has_valid_data}
 
     Example:
-        >>> evaluate_result_quality({"ter": 0.005, "NAV": None, "Prices": []})
+        >>> evaluate_result_quality({"TER": 0.005, "NAV": None, "PRICES": []})
         {"TER": True, "NAV": False, "PRICES": False}
     """
     return {
-        field.upper(): not is_value_empty(value)
+        field: not is_value_empty(value)
         for field, value in result_data.items()
     }
 
