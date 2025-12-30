@@ -33,60 +33,62 @@ class BloombergReferenceHandler(ReferenceFieldHandler):
         Process Bloomberg ReferenceDataRequest.
 
         Args:
-            requests: List of reference requests
+            requests: List of reference requests (each with instrument, fields, subscription)
             session: Bloomberg session
             service: Bloomberg refdata service
 
         Returns:
-            Dict[subscription, Dict[field, value]]
+            Dict[instrument_id, Dict[field, value]]
         """
         if not requests:
             return {}
 
-        # Extract subscriptions and correlation IDs
-        subscriptions = []
-        corr_ids = []
+        logger.info("Processing Bloomberg ReferenceDataRequest: %d instruments",
+                   len(requests))
 
-        for req in requests:
-            sub = req.subscription or req.instrument.isin or req.instrument.ticker
-            subscriptions.append(sub)
-            corr_ids.append(req.instrument.id)
-
-        # Collect all unique fields
-        fields = list({f.upper() for r in requests for f in r.fields})
-
-        logger.info("Processing Bloomberg ReferenceDataRequest: %d instruments, fields=%s",
-                   len(subscriptions), fields)
-
-        # Send all requests
-        self._send_reference_requests(service, session, subscriptions, fields, corr_ids)
+        # Send requests directly from request objects (no spacchettazione)
+        expected_corr_ids = self._send_reference_requests_from_objects(
+            service, session, requests
+        )
 
         # Collect all responses
         data = self._collect_batch_responses(
             session=session,
             response_type="ReferenceDataResponse",
-            expected_corr_ids=set(corr_ids)
+            expected_corr_ids=expected_corr_ids
         )
 
-        # Convert from {corr_id: {field: value}} to {subscription: {field: value}}
-        result = {}
-        for sub, corr_id in zip(subscriptions, corr_ids):
-            if corr_id in data:
-                result[sub] = data[corr_id]
+        return data
 
-        return result
-
-    def _send_reference_requests(
+    def _send_reference_requests_from_objects(
             self,
             service: blpapi.Service,
             session: blpapi.Session,
-            subscriptions: List[str],
-            fields: List[str],
-            corr_ids: List[str]
-    ):
-        """Send Bloomberg ReferenceDataRequest for each subscription."""
-        for sub, cid in zip(subscriptions, corr_ids):
-            request = service.createRequest("ReferenceDataRequest")
+            requests: List[BaseRequest]
+    ) -> Set[str]:
+        """
+        Send Bloomberg ReferenceDataRequest directly from request objects.
+
+        Each request is sent independently with its own fields.
+        No unpacking/repacking of subscriptions or fields.
+
+        Args:
+            service: Bloomberg refdata service
+            session: Bloomberg session
+            requests: List of BaseStaticRequest objects
+
+        Returns:
+            Set of correlation IDs (instrument IDs) expected in responses
+        """
+        expected_corr_ids = set()
+
+        for req in requests:
+            # Extract subscription (security ID) from request
+            sub = req.subscription or req.instrument.isin or req.instrument.ticker
+            corr_id = req.instrument.id
+
+            # Create Bloomberg request
+            bb_request = service.createRequest("ReferenceDataRequest")
 
             # Handle ISIN format
             if sub.upper().endswith(" ISIN"):
@@ -95,13 +97,22 @@ class BloombergReferenceHandler(ReferenceFieldHandler):
             else:
                 bb_code = sub
 
-            request.append("securities", bb_code)
-            for f in fields:
-                request.append("fields", f)
+            bb_request.append("securities", bb_code)
 
-            corr_id_obj = blpapi.CorrelationId(cid)
-            session.sendRequest(request, correlationId=corr_id_obj)
-            logger.debug("Sent ReferenceDataRequest: %s (corr_id=%s)", bb_code, cid)
+            # Add fields from this specific request
+            for field in req.fields:
+                field_str = str(field).upper()
+                bb_request.append("fields", field_str)
+
+            # Send request
+            corr_id_obj = blpapi.CorrelationId(corr_id)
+            session.sendRequest(bb_request, correlationId=corr_id_obj)
+            expected_corr_ids.add(corr_id)
+
+            logger.debug("Sent ReferenceDataRequest: %s, fields=%s (corr_id=%s)",
+                        bb_code, req.fields, corr_id)
+
+        return expected_corr_ids
 
     def _collect_batch_responses(
             self,

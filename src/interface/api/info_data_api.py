@@ -67,7 +67,7 @@ class InfoDataAPI(BaseAPI):
             instruments: list,
             fields: Union[str, List[str]],
             source: Union[str, List[str], Dict[str, str]],
-            type: Union[str, List[str], Dict[str, str]],
+            request_type: Union[str, List[str], Dict[str, str]],
             subscriptions: Optional[Union[str, List[str], Dict[str, str]]] = None,
             market: Optional[Union[str, List[str], Dict[str, str]]] = None,
             fallbacks: Optional[List[Dict[str, Any]]] = None,
@@ -87,7 +87,7 @@ class InfoDataAPI(BaseAPI):
             instruments (list): List of instrument objects to query.
             fields (str | list[str]): Data fields to request.
             source (str | list[str] | dict[str, str]): Data source(s) (e.g., 'oracle', 'bloomberg').
-            type (str | list[str] | dict[str, str]): Request type(s) ('reference', 'bulk', 'historical').
+            request_type (str | list[str] | dict[str, str]): Request type(s) ('reference', 'bulk', 'historical').
             subscriptions (str | list[str] | dict[str, str], optional): Optional subscription identifiers.
             market (str | list[str] | dict[str, str], optional): Market codes (e.g., 'ETFP', 'EUREX').
             fallbacks (list[dict], optional): Alternative configs to retry on incomplete results.
@@ -104,7 +104,7 @@ class InfoDataAPI(BaseAPI):
         market = normalize_param(market, instruments, default=None)
         source = normalize_param(source, instruments, default=None)
         subscriptions = normalize_param(subscriptions, instruments, default=None)
-        type = normalize_param(type, instruments, default=None)
+        request_type = normalize_param(request_type, instruments, default=None)
 
         requests = []
 
@@ -116,7 +116,7 @@ class InfoDataAPI(BaseAPI):
                 market=market[i],
                 source=source[i],
                 subscriptions=subscriptions[i],
-                type=type[i],
+                request_type=request_type[i],
                 **kwargs,
             )
             requests.append(req)
@@ -237,7 +237,7 @@ class InfoDataAPI(BaseAPI):
             market: Optional[Union[str, List[str], Dict[str, str]]] = None,
             currency: Union[str, List[str], Dict[str, str]] = "EUR",
             autocomplete: Optional[bool] = None,
-            fields: Optional[List[str]] = None,
+            fields: Optional[Union[List[str], str]] = None,
             **kwargs,
     ):
         """
@@ -267,6 +267,8 @@ class InfoDataAPI(BaseAPI):
         # Mode 2: pre-built instruments
         if instruments is not None:
             return self.get_with_instruments(instruments=instruments, **kwargs)
+        if isinstance(fields, str):
+            fields = [fields]
 
         # Mode 1: build instruments
         auto = self.autocomplete if autocomplete is None else autocomplete
@@ -316,16 +318,8 @@ class InfoDataAPI(BaseAPI):
         market = normalize_param(market, instruments, default=None)
         request_type = normalize_param(request_type, instruments, default=None)
 
-        result = self._dispatch(
-            instruments=instruments,
-            fields=fields,
-            source=source,
-            subscriptions=subscriptions,
-            market=market,
-            type=request_type,
-            fallbacks=fallbacks,
-            **extra_params,
-        )
+        result = self._dispatch(instruments=instruments, fields=fields, source=source, request_type=request_type,
+                                subscriptions=subscriptions, market=market, fallbacks=fallbacks, **extra_params)
 
         result = self._aggregate(result)
         return self._rename_fields(result, fields if isinstance(fields, list) else [fields], source)
@@ -434,7 +428,7 @@ class InfoDataAPI(BaseAPI):
             isin=isin,
             ticker=ticker,
             source=source,
-            fields="DIVIDEND",
+            fields=["DVD_HIST_ALL"],
             request_type="bulk",
             start=start,
             end=end

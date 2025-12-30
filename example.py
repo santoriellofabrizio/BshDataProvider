@@ -15,9 +15,8 @@ from interface.bshdata import BshData
 
 
 def adjustment(start):
-    etf_tickers = ["IUSA", "IUSE", "CSSPX"]
-    future_id = "ES"
-    start = "2025-07-01"
+    etf_tickers = ["IUSE","IUSA"]
+    start = "2025-11-01"
 
     api = BshData(autocomplete=True)
     factory = InstrumentFactory()
@@ -30,9 +29,7 @@ def adjustment(start):
         for t in etf_tickers
     ]
 
-    future_instrument = factory.create(id=future_id, type=InstrumentType.FUTURE, autocomplete=True)
-
-    all_instruments = etf_instruments + [future_instrument]
+    all_instruments = etf_instruments
     instruments_dict = {inst.id: inst for inst in all_instruments}
 
     # ============================================================
@@ -40,16 +37,17 @@ def adjustment(start):
     # ============================================================
     prices_etf = api.market.get_daily_etf(
         ticker=etf_tickers,
-        start=start,
-        fallbacks=[{"source": "bloomberg"}])
-
-    prices_future = api.market.get_daily_future(
-        id=future_id,
-        source="bloomberg",
-        snapshot_time="16:00:00",
         start=start)
+    #
+    # prices_future = api.market.get_daily_future(
+    #     id=future_id,
+    #     source="bloomberg",
+    #     snapshot_time="16:00:00",
+    #     start=start)
 
-    prices = pd.concat([prices_etf, prices_future], axis=1)
+    # prices = pd.concat([prices_etf, prices_future], axis=1)
+    prices = prices_etf
+
 
     # ============================================================
     # 3. GET REPO RATES
@@ -60,11 +58,6 @@ def adjustment(start):
         start=start,
         currencies=instrument_currencies,
     )
-
-    repo_rate = pd.DataFrame({
-        i.id: repo_rates_for_currency[i.currency.value]
-        for i in all_instruments
-    }, index=repo_rates_for_currency.index)
 
     # ============================================================
     # 4. GET FX & STATIC DATA
@@ -88,12 +81,11 @@ def adjustment(start):
     # ============================================================
     # 5. BUILD ADJUSTER WITH INSTRUMENTS
     # ============================================================
-    adjuster = (Adjuster(instruments=instruments_dict, prices=prices, fx_prices=fx)
-                .add(FxSpotComponent(fx_composition))
+    adjuster = (Adjuster(prices=prices)
+                .add(FxSpotComponent(fx_composition,fx_prices=fx))
                 .add(FxForwardCarryComponent(fx_forward_composition, fx_forward_prices, "1M", fx))
                 .add(TerComponent(ter))
-                .add(DividendComponent(dividends))
-                .add(RepoComponent(repo_rate)))
+                .add(DividendComponent(dividends, fx_prices=fx)))
 
     adjustments = adjuster.calculate()
     breakdown = adjuster.get_breakdown()

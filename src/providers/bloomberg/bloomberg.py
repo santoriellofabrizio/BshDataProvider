@@ -149,12 +149,10 @@ class BloombergProvider(BaseProvider):
                 ))
 
             case "reference":
-                return _rename_fields(self.fetcher.fetch_reference_data(
-                    subscriptions, _get_bbg_field(fields), corr_ids=instrument_list))
+                return _rename_fields(self.fetcher.fetch_reference_data(requests))
 
             case "bulk":
-                return _rename_fields(self.fetcher.fetch_bulk_data(
-                    subscriptions, _get_bbg_field(fields), corr_ids=instrument_list, start=first_req.start))
+                return _rename_fields(self.fetcher.fetch_bulk_data(requests))
 
     # ============================================================
     # SESSION MANAGEMENT

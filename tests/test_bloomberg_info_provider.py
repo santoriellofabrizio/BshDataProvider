@@ -138,7 +138,7 @@ ISIN_LIST = [
 def test_bloomberg_yas(api: BshData):
     print("\n========== TEST BLOOMBERG YAS ==========")
     df = api.info.get_etp_fields(ticker="IHYG", source="bloomberg", fields="YAS_YLD_SPREAD",
-                        subscriptions="IHYG LN EQUITY")
+                                 subscriptions="IHYG LN EQUITY")
     print(f"Fetched {len(df)} rows for YAS_YLD_SPREAD on IHYG")
     print(df.head(10).to_string(index=True))
     print("=======================================\n")
@@ -168,8 +168,7 @@ def test_bloomberg_nav(api: BshData):
     assert nav is not None
     assert not nav.empty
 
+
 def test_ter(api: BshData):
     ter = api.info.get_ter(ISIN_LIST)
     assert len(ter) > 0
-
-

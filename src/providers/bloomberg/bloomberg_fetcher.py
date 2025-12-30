@@ -31,6 +31,7 @@ from types import SimpleNamespace
 import blpapi
 
 from core.base_classes.base_fetcher import BaseFetcher
+from core.requests.requests import BaseStaticRequest, BulkRequest
 from core.utils.memory_provider import cache_bsh_data
 from providers.bloomberg.handlers.bulk_field_handler import BloombergBulkHandler
 from providers.bloomberg.handlers.historical_field_handler import BloombergHistoricalHandler
@@ -89,14 +90,13 @@ class BloombergFetcher(BaseFetcher):
     @cache_bsh_data
     def fetch_reference_data(
             self,
-            subscriptions: List[str],
-            fields: List[str],
-            corr_ids: List[str],
+            requests: List[BaseStaticRequest],
     ) -> Dict[str, Dict[str, Any]]:
         """
         Fetch Bloomberg reference data (static fields).
 
         Args:
+            requests:
             subscriptions: Bloomberg security identifiers
             fields: Bloomberg field names
             corr_ids: Correlation IDs for mapping responses
@@ -104,17 +104,7 @@ class BloombergFetcher(BaseFetcher):
         Returns:
             Dict[corr_id, Dict[field, value]]
         """
-        if not subscriptions or not fields:
-            logger.warning("Empty subscriptions or fields for ReferenceDataRequest")
-            return {}
 
-        if len(subscriptions) != len(corr_ids):
-            raise ValueError("subscriptions and corr_ids must have same length")
-
-        logger.info("Fetching Bloomberg ReferenceData: %s for %d instruments", fields, len(subscriptions))
-
-        # Create pseudo-requests for the handler
-        requests = self._create_static_requests(subscriptions, fields, corr_ids, "reference")
 
         # Delegate to handler
         return self.reference_handler.handle(requests, self.session, self.service)
@@ -170,36 +160,16 @@ class BloombergFetcher(BaseFetcher):
     @cache_bsh_data
     def fetch_bulk_data(
             self,
-            subscriptions: List[str],
-            fields: List[str],
-            corr_ids: List[str],
-            start: Optional[date] = None,
-            end: Optional[date] = None
+            requests: List[BulkRequest],
     ) -> Dict[str, Any]:
         """
         Fetch Bloomberg bulk data (tabular fields).
 
         Args:
-            subscriptions: Bloomberg security identifiers
-            fields: Bloomberg bulk field names (e.g., DVD_HIST_ALL)
-            corr_ids: Correlation IDs for mapping responses
-            start: Start date for filtering (optional)
-            end: End date for filtering (optional)
-
+            requests: list of BulkRequest objects
         Returns:
             Dict[corr_id, Dict[field, Dict[date, value]]] or {} if no data
         """
-        if not subscriptions or not fields:
-            logger.warning("Empty subscriptions or fields for BulkDataRequest")
-            return {}
-
-        if len(subscriptions) != len(corr_ids):
-            raise ValueError("subscriptions and corr_ids must have same length")
-
-        logger.info("Fetching Bloomberg bulk data: %s for %d instruments", fields, len(subscriptions))
-
-        # Create pseudo-requests for the handler
-        requests = self._create_static_requests(subscriptions, fields, corr_ids, "bulk", start, end)
 
         # Delegate to handler
         return self.bulk_handler.handle(requests, self.session, self.service)

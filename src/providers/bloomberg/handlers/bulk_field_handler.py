@@ -301,7 +301,7 @@ class BloombergBulkHandler(BulkFieldHandler):
         for subscription, fields_data in raw_data.items():
             dvd_data = fields_data.get("DVD_HIST_ALL")
             if not dvd_data or not isinstance(dvd_data, list):
-                parsed[subscription] = {"DIVIDEND_AMOUNT": {}}
+                parsed[subscription] = {"DVD_HIST_ALL": {}}
                 continue
 
             divs: Dict[date, float] = {}
@@ -328,9 +328,9 @@ class BloombergBulkHandler(BulkFieldHandler):
 
             if divs:
                 parsed[subscription] = {
-                    "DIVIDEND_AMOUNT": dict(sorted(divs.items(), key=lambda x: x[0], reverse=True))
+                    "DVD_HIST_ALL": dict(sorted(divs.items(), key=lambda x: x[0], reverse=True))
                 }
             else:
-                parsed[subscription] = {"DIVIDEND_AMOUNT": {}}
+                parsed[subscription] = {"DVD_HIST_ALL": {}}
 
         return parsed
