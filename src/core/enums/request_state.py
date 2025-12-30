@@ -259,18 +259,20 @@ def evaluate_result_quality(result_data: Dict[str, Any]) -> Dict[str, bool]:
     """
     Valuta la qualità di ogni field in un risultato.
 
+    Le chiavi vengono normalizzate a UPPERCASE per consistenza.
+
     Args:
         result_data: Dizionario {field_name: value}
 
     Returns:
-        Dizionario {field_name: has_valid_data}
+        Dizionario {FIELD_NAME: has_valid_data} (chiavi uppercase)
 
     Example:
-        >>> evaluate_result_quality({"TER": 0.005, "NAV": None, "PRICES": []})
+        >>> evaluate_result_quality({"ter": 0.005, "NAV": None, "Prices": []})
         {"TER": True, "NAV": False, "PRICES": False}
     """
     return {
-        field: not is_value_empty(value)
+        field.upper(): not is_value_empty(value)
         for field, value in result_data.items()
     }
 
