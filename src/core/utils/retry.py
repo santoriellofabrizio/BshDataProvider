@@ -3,6 +3,7 @@ from typing import List, Callable, Dict, Any, Set
 from core.requests.requests import BaseRequest
 from core.response_tracking import RequestStatus
 from core.response_tracking.request_tracker import RequestTracker
+from core.enums.request_state import is_none_or_nan
 
 
 class RetryManager:
@@ -154,3 +155,16 @@ class RetryManager:
 
         # Altrimenti mantieni il base (già valido)
         return base_value
+
+    @staticmethod
+    def _is_none_or_nan(value: Any) -> bool:
+        """
+        Check if a value is None or NaN.
+
+        Args:
+            value: Value to check
+
+        Returns:
+            True if value is None or NaN, False otherwise
+        """
+        return is_none_or_nan(value)

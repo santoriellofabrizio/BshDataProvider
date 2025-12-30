@@ -11,7 +11,8 @@ from typing import Optional, Set, Dict, Any
 from core.enums.request_state import (
     RequestState,
     infer_state_from_result,
-    evaluate_result_quality
+    evaluate_result_quality,
+    is_none_or_nan
 )
 from core.requests.requests import BaseRequest
 
@@ -151,8 +152,8 @@ class RequestStatus:
                 if isinstance(field_value, dict):
                     # È un dizionario, potrebbe essere timeseries
                     total_entries = len(field_value)
-                    missing_entries = sum(1 for v in field_value.values() if v is None)
-                    
+                    missing_entries = sum(1 for v in field_value.values() if is_none_or_nan(v))
+
                     if missing_entries > 0:
                         # Timeseries incompleta - registra metadata
                         updated_metadata[f"timeseries_{field_upper}_incomplete"] = {
