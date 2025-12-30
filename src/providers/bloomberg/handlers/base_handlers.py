@@ -4,6 +4,7 @@ from typing import Optional, List, Dict, Any, Set
 
 import blpapi
 
+from core.holidays.holiday_manager import HolidayManager
 from core.requests.requests import BaseRequest
 
 logger = logging.getLogger(__name__)
@@ -27,6 +28,7 @@ class Handler(ABC):
 
     def __init__(self):
         self._next: Optional['Handler'] = None
+        self.holidays = HolidayManager()
 
     def set_next(self, handler: 'Handler') -> 'Handler':
         """Link the next handler in the chain."""
@@ -99,7 +101,7 @@ class Handler(ABC):
                 for field, submap in normalized.items():
                     ufield = field.upper()
                     if ufield in req_fields:
-                        val = submap.get(sub)
+                        val = submap.get(req_id)
                         results[req_id][ufield] = val
                         handled_fields.add(ufield)
 

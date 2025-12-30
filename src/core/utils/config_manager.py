@@ -44,7 +44,7 @@ class ClientConfig:
     """Client-level configuration."""
     activate_oracle: bool = True
     activate_timescale: bool = True
-    activate_bloomberg: bool = False
+    activate_bloomberg: bool = True
     activate_mock: bool = False
 
     @classmethod

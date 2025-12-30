@@ -2,7 +2,6 @@ import datetime as dt
 import time
 import pytest
 
-from core.enums import DataSource
 from interface.bshdata import BshData
 
 
@@ -26,11 +25,11 @@ def test_timescale_intraday_best_sampled(api, sample_isins):
     """Single intraday ETF request (1m best sampled)."""
     res = api.market.get_intraday_etf(
         isin=sample_isins[0],
-        date="2025-10-01",
+        date="2025-12-01",
         frequency="1m",
         fields="mid",
         market="EURONEXT",
-        source=DataSource.TIMESCALE,
+        source="timescale",
     )
     print(res.head())
     assert res is not None
@@ -44,7 +43,7 @@ def test_timescale_multi_intraday_best_sampled(api, sample_isins):
         frequency="1m",
         fields="mid",
         market="EURONEXT",
-        source=DataSource.TIMESCALE,
+        source="timescale",
     )
     print(res.head())
     assert res is not None
@@ -58,7 +57,7 @@ def test_timescale_daily_fairvalue(api, sample_isins):
         start="2025-10-01",
         fields="mid",
         market="ETFP",
-        source=DataSource.TIMESCALE,
+        source="timescale",
         snapshot_time=dt.time(11, 0),
     )
     print(res.head())
@@ -74,7 +73,7 @@ def test_timescale_batch_fairvalue(api, sample_isins):
         end=dt.datetime(2025, 9, 26),
         fields="mid",
         market="EURONEXT",
-        source=DataSource.TIMESCALE,
+        source="timescale",
         snapshot_time=dt.time(11, 0),
     )
     df = res
@@ -91,7 +90,7 @@ def test_timescale_batch_intraday(api, sample_isins):
         fields="mid",
         market="EURONEXT",
         frequency="1m",
-        source=DataSource.TIMESCALE,
+        source="timescale",
     )
     df = res
     print(res.head())
@@ -121,7 +120,7 @@ def test_timescale_daily_fairvalue_batch_perf(api):
         end=dt.datetime(2025, 9, 26),
         fields="mid",
         market="EURONEXT",
-        source=DataSource.TIMESCALE,
+        source="timescale",
         snapshot_time=dt.time(11, 0),
     )
     elapsed = time.time() - t0
@@ -148,7 +147,7 @@ def test_timescale_daily_fairvalue_single_perf(api):
             end=dt.datetime(2025, 12, 26),
             fields="mid",
             market="EURONEXT",
-            source=DataSource.TIMESCALE,
+            source="timescale",
             snapshot_time=dt.time(11, 0),
         )
         for isin in isin_list
@@ -171,7 +170,7 @@ def test_timescale_daily_currency_perf(api):
         start=dt.datetime(2025, 9, 22),
         end=dt.datetime(2025, 9, 26),
         fields="mid",
-        source=DataSource.TIMESCALE,
+        source="timescale",
         snapshot_time=dt.time(11, 0),
     )
     elapsed = time.time() - t0

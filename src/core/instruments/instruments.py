@@ -4,6 +4,7 @@ import logging
 
 from core.enums.currencies import CurrencyEnum
 from core.enums.instrument_types import InstrumentType
+from core.enums.issuers import IssuerGroup
 
 logger = logging.getLogger(__name__)
 T = TypeVar("T", bound="Instrument")
@@ -75,6 +76,7 @@ class EtfInstrument(Instrument):
     underlying_index: Optional[Literal["EQUITY", "FIXED INCOME", "COMMODITY"]] = None
     index_provider: Optional[str] = None
     replication_method: Optional[str] = None
+    issuer: Optional[IssuerGroup] = None
 
     def __post_init__(self):
         self.type = InstrumentType.ETP

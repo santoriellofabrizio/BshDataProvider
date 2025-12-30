@@ -6,8 +6,8 @@ durante il suo ciclo di vita nel sistema BSH Data Provider.
 """
 
 from enum import Enum
-from typing import Set, Any, Dict
 import math
+from typing import Set, Any, Dict
 
 
 class RequestState(Enum):
@@ -116,7 +116,6 @@ class RequestState(Enum):
         }
         return display_names.get(self, self.value)
 
-
     def can_transition_to(self, new_state: 'RequestState') -> bool:
         """
         Verifica se è possibile transitare a un nuovo stato.
@@ -200,7 +199,8 @@ def is_value_empty(value: Any) -> bool:
     Determina se un valore è considerato "vuoto" (no dati utili).
 
     Vuoto significa:
-        - None or NaN
+        - None
+        - NaN (float o numpy)
         - Lista/dict vuoti
         - Lista/dict con solo valori None/NaN
         - Time series con tutti i valori None/NaN
@@ -227,6 +227,18 @@ def is_value_empty(value: Any) -> bool:
     """
     if is_none_or_nan(value):
         return True
+
+    # Gestisci NaN per float e numpy
+    if isinstance(value, float) and math.isnan(value):
+        return True
+
+    # Gestisci numpy.nan (se numpy è presente)
+    try:
+        import numpy as np
+        if isinstance(value, (np.floating, np.integer)) and np.isnan(value):
+            return True
+    except (ImportError, TypeError):
+        pass
 
     if isinstance(value, (list, tuple)):
         if len(value) == 0:
@@ -259,20 +271,79 @@ def evaluate_result_quality(result_data: Dict[str, Any]) -> Dict[str, bool]:
     """
     Valuta la qualità di ogni field in un risultato.
 
+    Le chiavi vengono normalizzate a UPPERCASE per consistenza.
+
     Args:
         result_data: Dizionario {field_name: value}
 
     Returns:
-        Dizionario {field_name: has_valid_data}
+        Dizionario {FIELD_NAME: has_valid_data} (chiavi uppercase)
 
     Example:
-        >>> evaluate_result_quality({"TER": 0.005, "NAV": None, "PRICES": []})
+        >>> evaluate_result_quality({"ter": 0.005, "NAV": None, "Prices": []})
         {"TER": True, "NAV": False, "PRICES": False}
     """
     return {
-        field: not is_value_empty(value)
+        field.upper(): not is_value_empty(value)
         for field, value in result_data.items()
     }
+
+
+# ============================================================
+# Timeseries Gap Detection
+# ============================================================
+
+def _has_timeseries_with_gaps(value: Any) -> bool:
+    """
+    Controlla se un valore è una timeseries con gap (NaN/None in mezzo).
+
+    Una timeseries ha gap se:
+    - È un dict (timeseries)
+    - Ha più di un valore
+    - Almeno uno è None/NaN e almeno uno è valido (gap in mezzo, non tutti vuoti)
+
+    Args:
+        value: Valore da controllare (potrebbe essere timeseries)
+
+    Returns:
+        True se è timeseries con gap interni
+
+    Examples:
+        >>> # Timeseries completa - no gap
+        >>> _has_timeseries_with_gaps({1: 100, 2: 200})
+        False
+
+        >>> # Timeseries con gap (NaN in mezzo)
+        >>> import math
+        >>> _has_timeseries_with_gaps({1: 100, 2: float('nan'), 3: 200})
+        True
+
+        >>> # Dict vuoto - no gap
+        >>> _has_timeseries_with_gaps({})
+        False
+
+        >>> # Un solo valore - no gap
+        >>> _has_timeseries_with_gaps({1: 100})
+        False
+    """
+    if not isinstance(value, dict):
+        return False
+
+    if len(value) <= 1:
+        return False
+
+    # Controlla se ci sono valori None/NaN e valori validi mescolati
+    has_valid = False
+    has_invalid = False
+
+    for v in value.values():
+        if is_none_or_nan(v):
+            has_invalid = True
+        else:
+            has_valid = True
+
+    # Gap = sia validi che invalidi presenti
+    return has_valid and has_invalid
 
 
 # ============================================================
@@ -288,6 +359,8 @@ def infer_state_from_result(
     """
     Inferisce lo stato di una richiesta basandosi sui field ricevuti e la qualità dei dati.
 
+    IMPORTANTE: Timeseries con NaN interni vengono marcate come PARTIAL per permettere retry.
+
     Args:
         fields_requested: Set di field richiesti
         fields_received: Set di field presenti nella risposta (chiavi del dict)
@@ -298,17 +371,26 @@ def infer_state_from_result(
         RequestState appropriato
 
     Examples:
+        >>> # Tutto completo
         >>> infer_state_from_result({"TER", "NAV"}, {"TER", "NAV"}, result_data={"TER": 0.005, "NAV": 100})
         RequestState.COMPLETE
 
+        >>> # Alcuni field mancano
         >>> infer_state_from_result({"TER", "NAV"}, {"TER", "NAV"}, result_data={"TER": 0.005, "NAV": None})
         RequestState.PARTIAL
 
+        >>> # Tutti i field sono None
         >>> infer_state_from_result({"TER", "NAV"}, {"TER", "NAV"}, result_data={"TER": None, "NAV": None})
         RequestState.EMPTY
 
-        >>> infer_state_from_result({"TER", "NAV"}, set())
-        RequestState.FAILED
+        >>> # Timeseries con gap (NaN interni) -> PARTIAL per retry
+        >>> import math
+        >>> infer_state_from_result(
+        ...     {"MID"},
+        ...     {"MID"},
+        ...     result_data={"MID": {1: 100, 2: float('nan'), 3: 200}}
+        ... )
+        RequestState.PARTIAL
     """
     if has_error:
         return RequestState.FAILED
@@ -333,8 +415,19 @@ def infer_state_from_result(
             # Tutti i field sono vuoti/None
             return RequestState.EMPTY
 
+        # IMPORTANTE: Controlla se ci sono timeseries con gap (NaN interni)
+        # Se anche uno solo ha gap, lo stato deve essere PARTIAL per permettere retry
+        has_timeseries_gaps = any(
+            _has_timeseries_with_gaps(result_data.get(field.lower(), result_data.get(field)))
+            for field in fields_with_data
+        )
+
+        if has_timeseries_gaps:
+            # Timeseries con NaN in mezzo -> PARTIAL (deve essere richiesto di nuovo)
+            return RequestState.PARTIAL
+
         if fields_with_data == fields_requested:
-            # Tutti i field hanno dati validi
+            # Tutti i field hanno dati validi SENZA gap
             return RequestState.COMPLETE
 
         # Alcuni field hanno dati, altri no

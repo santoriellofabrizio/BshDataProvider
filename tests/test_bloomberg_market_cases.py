@@ -131,7 +131,6 @@ ISIN_LIST = [
 
 import pandas as pd
 
-
 # ============================================================
 # TESTS
 # ============================================================
@@ -148,6 +147,11 @@ def test_bloomberg_ter(api: BshData):
     assert ter is not None
     assert not df.empty
 
+def test_bloomberg_daily_etf(api: BshData):
+
+    df = api.market.get_daily_etf(ticker=["IHYG", "IHYU"], start='2025-12-11', fallbacks=[{"source":"bloomberg","market":"IM"}])
+    print(df)
+    assert df is not None
 
 def test_bloomberg_yas(api: BshData):
     print("\n========== TEST BLOOMBERG YAS ==========")

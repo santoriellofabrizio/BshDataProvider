@@ -33,6 +33,8 @@ from core.decorators.respect_cache_status import respect_cache_kwarg
 from core.enums.instrument_types import InstrumentType
 from core.requests.request_builder.request_builder import RequestBuilder
 from core.utils.common import normalize_list, normalize_param
+from core.utils.merge_utils import merge_incomplete_results
+
 from interface.api.base_api import BaseAPI
 
 
@@ -189,9 +191,13 @@ class MarketDataAPI(BaseAPI):
             # Send retry requests
             retry_result = self.client.send(retry_requests)
 
-            # Merge results (retry results override original)
+            # Merge intelligente: aggiorna SOLO le date/valori con NaN
             if retry_result:
-                merged_result.update(retry_result)
+                merged_result = merge_incomplete_results(
+                    original_results=merged_result,
+                    retry_results=retry_result,
+                    incomplete_statuses=incomplete_statuses,
+                )
 
             # Check if all incomplete are now complete
             still_incomplete = self.client.tracker.get_incomplete()
