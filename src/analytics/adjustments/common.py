@@ -11,11 +11,12 @@ import pandas as pd
 
 logger = logging.getLogger(__name__)
 
+
 def calculate_year_fractions(
-    dates: list[date] | pd.DatetimeIndex,
-    shifted: bool = False,
-    settlement_days: int = 2,
-    number_of_days: int = 365,
+        dates: list[date] | pd.DatetimeIndex,
+        shifted: bool = False,
+        settlement_days: int = 2,
+        number_of_days: int = 365,
 ) -> pd.Series:
     """
     Calculate year fractions for pro-rata calculations.
@@ -43,7 +44,7 @@ def calculate_year_fractions(
     """
     # Convert to list if DatetimeIndex
     if isinstance(dates, pd.DatetimeIndex):
-        dates = dates.date.tolist()
+        dates = dates.tolist()
 
     if not dates:
         return pd.Series(dtype=float)

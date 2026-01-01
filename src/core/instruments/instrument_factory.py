@@ -207,7 +207,7 @@ class InstrumentFactory(Singleton):
             issuer=issuer
         )
 
-    def _build_currency_pair(self, id_, autocomplete, **kwargs) -> CurrencyPairInstrument:
+    def _build_currency_pair(self, id_, autocomplete, **kwargs):
         """Build currency pair instrument (e.g., EURUSD)"""
         currency_pair_code = id_.split(" ")[0]
         assert len(currency_pair_code) == 6, "specify currency pair code as pair (EURUSD not just USD)"
@@ -224,7 +224,7 @@ class InstrumentFactory(Singleton):
             **kwargs
         )
 
-    def _build_currency(self, id_, autocomplete, **kwargs) -> CurrencyInstrument:
+    def _build_currency(self, id_, autocomplete, **kwargs):
         """Build currency instrument with metadata"""
         currency_code = id_
         assert CurrencyEnum.exists(currency_code), "currency_code does not exist"
@@ -437,8 +437,7 @@ class InstrumentFactory(Singleton):
 
     def register(self, instrument: Instrument) -> None:
         """Register instrument in internal cache (thread-safe)"""
-        with self._lock:
-            self._instruments[instrument.id] = instrument
+        self._instruments[instrument.id] = instrument
 
     def get(self, id_: str, **kwargs) -> Instrument:
         """
