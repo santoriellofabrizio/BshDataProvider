@@ -31,7 +31,7 @@ class FXForwardClassifier(BaseClassifier):
         idu = identifier.upper().strip()
         if len(idu) < 3:
             return None
-        return idu[:3]  # ES: EURUSD → EUR, USDJPY → USD
+        return idu[:3]  # ES: EURUSD -> EUR, USDJPY -> USD
 
     def get_quoted_currency(self, identifier: str) -> Optional[str]:
         """
@@ -40,4 +40,4 @@ class FXForwardClassifier(BaseClassifier):
         idu = identifier.upper().strip()
         if len(idu) < 6:
             return None
-        return idu[3:6]  # ES: EURUSD → USD, USDJPY → JPY
+        return idu[3:6]  # ES: EURUSD -> USD, USDJPY -> JPY

@@ -107,7 +107,7 @@ class DividendComponent(Component):
             return result
 
         # 4. Log processing
-        logger.info(
+        logger.debug(
             f"DividendComponent: Processing {len(applicable)}/{len(instruments)} instruments"
         )
         
@@ -272,7 +272,7 @@ class DividendComponent(Component):
 
                         logger.debug(
                             f"DividendComponent: {inst_id}: Applied adjustment at {t2}: "
-                            f"+{adjustment:.6f} (period {t1} → {t2})"
+                            f"+{adjustment:.6f} (period {t1} -> {t2})"
                         )
 
                         break  # Only apply to first crossing period

@@ -6,6 +6,8 @@ default:
     - 12-24
     - 12-25    # Natale
     - 12-26    # Santo Stefano
+    - 12-31
+    - 01-01
 
 markets:
   ETFPLUS:

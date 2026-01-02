@@ -92,7 +92,7 @@ def normalize_param(value, instruments, default=None):
     """
     n = len(instruments)
 
-    # None → list of default values
+    # None -> list of default values
     if value is None:
         return [default] * n
 

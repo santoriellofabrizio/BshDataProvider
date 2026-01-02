@@ -129,7 +129,7 @@ class Handler(ABC):
         # ============================================================
         # DETECT FORMAT
         # ============================================================
-        # Check if any top-level key matches a requested field → Format A
+        # Check if any top-level key matches a requested field -> Format A
         is_format_a = any(k.upper() in requested_fields for k in keys)
 
         # ============================================================
@@ -138,7 +138,7 @@ class Handler(ABC):
         results = {}
 
         if is_format_a:
-            # Format A: {FIELD: {subscription: value}} → {id: {field: value}}
+            # Format A: {FIELD: {subscription: value}} -> {id: {field: value}}
             for field, submap in out.items():
                 if not isinstance(submap, dict):
                     logger.warning(f"Expected dict for field '{field}', got {type(submap)}")
@@ -149,7 +149,7 @@ class Handler(ABC):
                     results.setdefault(instrument_id, {})[field.upper()] = value
 
         else:
-            # Format B: {subscription: {FIELD: value}} → {id: {field: value}}
+            # Format B: {subscription: {FIELD: value}} -> {id: {field: value}}
             for sub, fieldmap in out.items():
                 if not isinstance(fieldmap, dict):
                     logger.warning(f"Expected dict for subscription '{sub}', got {type(fieldmap)}")

@@ -210,7 +210,7 @@ class FxSpotComponent(Component):
         """
         Calculate FX spot adjustments using vectorized matrix operations.
 
-        Performance: O(N×M×T) → O(N×M + M×T) with matrix multiplication
+        Performance: O(N×M×T) -> O(N×M + M×T) with matrix multiplication
         """
         # 1. Validate input
         self.validate_input(instruments, dates, prices)
@@ -238,7 +238,7 @@ class FxSpotComponent(Component):
             return result
 
         # 5. Log processing
-        logger.info(
+        logger.debug(
             f"FxSpotComponent: Processing {len(applicable_ids)}/{len(instruments)} instruments"
         )
 

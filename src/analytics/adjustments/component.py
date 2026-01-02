@@ -22,7 +22,7 @@ class Component(ABC):
     Components are PURE CALCULATIONS:
     - No I/O (data passed in __init__)
     - No state (stateless)
-    - Deterministic (same input → same output)
+    - Deterministic (same input -> same output)
 
     Subclasses implement:
     - is_applicable(): Filter logic based on instrument
@@ -170,7 +170,7 @@ class Component(ABC):
         Each component stores its own data dependencies.
 
         Args:
-            instruments: Dict[instrument_id → Instrument object]
+            instruments: Dict[instrument_id -> Instrument object]
             dates: List of dates (date or datetime objects)
             prices: DataFrame(dates × instruments) with prices
 

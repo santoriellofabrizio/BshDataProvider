@@ -34,7 +34,7 @@ class TerComponent(Component):
     ):
         """
         Args:
-            ters: Dict or Series mapping instrument_id → annual TER (decimal)
+            ters: Dict or Series mapping instrument_id -> annual TER (decimal)
                   E.g., 0.0020 = 0.20%, NOT 0.20 = 20%
             shifted_settlement: Settlement convention (T+1, T+2, T+3)
             target: Optional list of instrument IDs to apply TER adjustments to.

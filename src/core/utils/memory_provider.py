@@ -144,7 +144,7 @@ class ReadablePathManager:
         Example:
             generate_path(cache_dir, "timescale", "market", "AAPL_US",
                          "mid_bid", "2024-01-01", "2024-12-31")
-            → cache/timescale/market/AAPL_US/mid_bid__2024-01-01__2024-12-31.pkl
+            -> cache/timescale/market/AAPL_US/mid_bid__2024-01-01__2024-12-31.pkl
         """
         provider = ReadablePathManager.sanitize(provider)
         category = ReadablePathManager.sanitize(category)
@@ -209,7 +209,7 @@ def lru_cache_with_metrics(maxsize=LRU_MAXSIZE):
     Usare per:
     - Parsing ISIN
     - Classificazioni strumenti
-    - Conversioni string → enum
+    - Conversioni string -> enum
     - Qualsiasi funzione pura con input serializzabili (str, int, tuple)
     """
 

@@ -102,10 +102,10 @@ class TimescaleProvider(BaseProvider):
             self.query_ts = QueryTimeScale(**cfg_dict)
             self.source = DataSource.TIMESCALE
             self.fetcher = TimescaleFetcher(self.query_ts)
-            logger.info("✅ TimescaleProvider initialized successfully")
+            logger.info("[OK] TimescaleProvider initialized successfully")
 
         except Exception as e:
-            logger.exception(f"❌ Failed to initialize TimescaleProvider: {e}")
+            logger.exception(f"[ERROR] Failed to initialize TimescaleProvider: {e}")
 
 
     # ===========================================================
@@ -191,7 +191,7 @@ class TimescaleProvider(BaseProvider):
                 f"but {len(all_results)} succeeded. Returning partial results."
             )
 
-        logger.info(f"✅ Completed Timescale fetch: {len(all_results)}/{len(requests)} instruments fetched")
+        logger.info(f"[OK] Completed Timescale fetch: {len(all_results)}/{len(requests)} instruments fetched")
         return all_results
 
     def fetch_info_data(self, request: BaseStaticRequest | List[BaseStaticRequest]):

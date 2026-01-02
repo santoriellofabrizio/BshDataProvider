@@ -328,11 +328,11 @@ class InfoDataAPI(BaseAPI):
         """
         Rinomina i campi in base alla mappatura StaticField.
         Supporta sia:
-          - dict[str, dict[str, Any]]  → ritorna dict
-          - pd.DataFrame con MultiIndex (instrument, field) → ritorna DataFrame
+          - dict[str, dict[str, Any]]  -> ritorna dict
+          - pd.DataFrame con MultiIndex (instrument, field) -> ritorna DataFrame
         """
         try:
-            # Crea mappatura Bloomberg → interno
+            # Crea mappatura Bloomberg -> interno
             mapping = {
                 StaticField.from_str(f, source).upper(): f for f in fields
             }
@@ -352,7 +352,7 @@ class InfoDataAPI(BaseAPI):
                         names=result.columns.names,
                     )
                 else:
-                    # singolo livello colonne → rinomina direttamente
+                    # singolo livello colonne -> rinomina direttamente
                     result.columns = [
                         mapping.get(c.upper(), c) for c in result.columns
                     ]

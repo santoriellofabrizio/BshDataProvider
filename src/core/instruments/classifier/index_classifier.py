@@ -37,7 +37,7 @@ class IndexClassifier(BaseClassifier):
     def get_family(self, identifier: str) -> Optional[str]:
         """
         Cerca la famiglia partendo da:
-        - TICKER (EUR003M → EURIBOR)
+        - TICKER (EUR003M -> EURIBOR)
         - FAMILY diretto (EURIBOR)
         """
         df = self._load()
@@ -60,8 +60,8 @@ class IndexClassifier(BaseClassifier):
     def get_tenor(self, identifier: str, family: Optional[str]) -> Optional[str]:
         """
         Regole:
-        - Se identifier è un ticker noto → usa dataset
-        - Se explicit tenor non c'è → fallback per family
+        - Se identifier è un ticker noto -> usa dataset
+        - Se explicit tenor non c'è -> fallback per family
         """
         df = self._load()
         idu = (identifier or "").upper()
@@ -166,7 +166,7 @@ class IndexClassifier(BaseClassifier):
             return idu
         # --------------------------------------------------------------
         if idu in df["FAMILY"].str.upper().values:
-            # Tenor mancante → warning + default 1D
+            # Tenor mancante -> warning + default 1D
             if not tenor:
                 logger.warning(f"Tenor missing for Index Family {idu}. Using default tenor '1D'.")
                 tenor = "1D"

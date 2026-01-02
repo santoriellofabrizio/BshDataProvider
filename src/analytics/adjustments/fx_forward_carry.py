@@ -32,8 +32,8 @@ class FxForwardCarryComponent(Component):
 
     Note:
         FX forward prices are assumed to be:
-        - Monthly tenor (1M) → annualized by multiplying × 12
-        - In basis points of rate differential → divided by 10,000
+        - Monthly tenor (1M) -> annualized by multiplying × 12
+        - In basis points of rate differential -> divided by 10,000
         - Expected final range: 0.0 to ~0.08 (0% to 8% annualized)
     """
 
@@ -83,7 +83,7 @@ class FxForwardCarryComponent(Component):
         self.tenor = tenor
         self.settlement_days = settlement_days
         
-        # Normalize FX forward columns (EURUSD 1M → USD)
+        # Normalize FX forward columns (EURUSD 1M -> USD)
         logger.debug("FxForwardCarryComponent: Normalizing FX forward columns")
         fx_fwd_normalized = self._normalize_fx_columns(fx_forward_prices, "forward")
         
@@ -91,7 +91,7 @@ class FxForwardCarryComponent(Component):
         logger.debug(f"FxForwardCarryComponent: Transforming FX forward prices for tenor {tenor}")
         self.fx_forward_prices = self._transform_fx_forward_prices(fx_fwd_normalized, tenor)
         
-        # Normalize FX spot columns (EURUSD → USD) - NO transformation needed
+        # Normalize FX spot columns (EURUSD -> USD) - NO transformation needed
         logger.debug("FxForwardCarryComponent: Normalizing FX spot columns")
         self.fx_spot_prices = self._normalize_fx_columns(fx_spot_prices, "spot")
 
@@ -167,7 +167,7 @@ class FxForwardCarryComponent(Component):
             return pd.DataFrame(0.0, index=dates_dt, columns=instrument_ids)
 
         # 4. Log processing
-        logger.info(
+        logger.debug(
             f"FxForwardCarryComponent: Processing {len(applicable_ids)}/{len(instruments)} instruments"
         )
 
@@ -267,7 +267,7 @@ class FxForwardCarryComponent(Component):
         Transform FX forward prices from basis points to annualized rates.
         
         Transformation:
-            1. Annualize based on tenor (1M → × 12, 3M → × 4, etc.)
+            1. Annualize based on tenor (1M -> × 12, 3M -> × 4, etc.)
             2. Convert from basis points to decimal (÷ 10,000)
         
         Formula:
@@ -355,14 +355,14 @@ class FxForwardCarryComponent(Component):
         Normalize FX columns to currency codes.
         
         Robust parsing handles:
-            'USD'           → 'USD' (already normalized)
-            'EURUSD'        → 'USD' (extract quote currency)
-            'EURUSD 1M'     → 'USD' (strip tenor)
-            'EURUSD_1M'     → 'USD' (strip tenor with underscore)
-            'EUR USD 1M'    → 'USD' (space-separated with tenor)
-            'EUREUR'        → 'EUR' (EUR itself, keep as-is)
-            'USDEUR'        → 'USD' (inverted, needs 1/price)
-            'USDEUR 1M'     → 'USD' (inverted with tenor)
+            'USD'           -> 'USD' (already normalized)
+            'EURUSD'        -> 'USD' (extract quote currency)
+            'EURUSD 1M'     -> 'USD' (strip tenor)
+            'EURUSD_1M'     -> 'USD' (strip tenor with underscore)
+            'EUR USD 1M'    -> 'USD' (space-separated with tenor)
+            'EUREUR'        -> 'EUR' (EUR itself, keep as-is)
+            'USDEUR'        -> 'USD' (inverted, needs 1/price)
+            'USDEUR 1M'     -> 'USD' (inverted with tenor)
         
         Args:
             fx_prices: DataFrame with FX prices
@@ -391,7 +391,7 @@ class FxForwardCarryComponent(Component):
                 normalized_columns[col] = base_ticker
                 if tenor:
                     logger.debug(
-                        f"FxForwardCarryComponent ({label}): '{col}' → '{base_ticker}' "
+                        f"FxForwardCarryComponent ({label}): '{col}' -> '{base_ticker}' "
                         f"(tenor: {tenor})"
                     )
                 continue
@@ -403,12 +403,12 @@ class FxForwardCarryComponent(Component):
                 
                 if tenor:
                     logger.debug(
-                        f"FxForwardCarryComponent ({label}): '{col}' → '{currency}' "
+                        f"FxForwardCarryComponent ({label}): '{col}' -> '{currency}' "
                         f"(tenor: {tenor})"
                     )
                 else:
                     logger.debug(
-                        f"FxForwardCarryComponent ({label}): '{col}' → '{currency}'"
+                        f"FxForwardCarryComponent ({label}): '{col}' -> '{currency}'"
                     )
                 continue
             
@@ -419,7 +419,7 @@ class FxForwardCarryComponent(Component):
                 columns_to_invert.append(col)
                 logger.warning(
                     f"FxForwardCarryComponent ({label}): '{col}' is inverted. "
-                    f"Inverting prices: 1/{col} → {currency}"
+                    f"Inverting prices: 1/{col} -> {currency}"
                     f"{f' (tenor: {tenor})' if tenor else ''}"
                 )
                 continue
@@ -457,7 +457,7 @@ class FxForwardCarryComponent(Component):
         
         logger.info(
             f"FxForwardCarryComponent ({label}): Normalized columns: "
-            f"{list(fx_prices.columns)} → {list(fx_normalized.columns)}"
+            f"{list(fx_prices.columns)} -> {list(fx_normalized.columns)}"
         )
         
         return fx_normalized

@@ -146,12 +146,12 @@ class BaseAPI:
         for i in range(n):
             i_id, i_isin, i_ticker = ids[i], isins[i], tickers[i]
 
-            # Caso 1: manca ID → usa isin o ticker
+            # Caso 1: manca ID -> usa isin o ticker
             if not i_id:
                 i_id = i_isin or i_ticker
                 ids[i] = i_id
 
-            # Caso 2: ID è ISIN → copia su isin
+            # Caso 2: ID è ISIN -> copia su isin
             if i_id and ISIN_RE.match(i_id):
                 isins[i] = i_isin or i_id
 
@@ -233,24 +233,24 @@ class BaseAPI:
 
         def normalize_date_index(s: pd.Series) -> pd.Series:
             """
-            Normalizza indici datetime.date → DatetimeIndex per evitare dtype='object'.
+            Normalizza indici datetime.date -> DatetimeIndex per evitare dtype='object'.
 
             Questo previene duplicati quando si fa concat di Series con chiavi date.
             Standard BshDataProvider:
-            - datetime.date → DatetimeIndex (display: '2025-12-05')
-            - datetime/Timestamp → DatetimeIndex con time
+            - datetime.date -> DatetimeIndex (display: '2025-12-05')
+            - datetime/Timestamp -> DatetimeIndex con time
             """
             if len(s.index) == 0:
                 return s
 
             first_key = s.index[0]
 
-            # datetime.date → DatetimeIndex normalizzato
+            # datetime.date -> DatetimeIndex normalizzato
             if isinstance(first_key, date) and not isinstance(first_key, datetime):
                 s.index = pd.DatetimeIndex(s.index)
                 return s
 
-            # datetime/Timestamp → assicura DatetimeIndex
+            # datetime/Timestamp -> assicura DatetimeIndex
             if isinstance(first_key, (datetime, pd.Timestamp)):
                 if not isinstance(s.index, pd.DatetimeIndex):
                     s.index = pd.to_datetime(s.index)

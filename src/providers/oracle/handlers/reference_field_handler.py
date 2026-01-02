@@ -22,7 +22,7 @@ class ISINLookupHandler(ReferenceFieldHandler):
 
         instrument_type = types[0]
 
-        # Oracle → { sub: { ISIN : value } }
+        # Oracle -> { sub: { ISIN : value } }
         return query.get_isin_by_ticker(subs, instrument_type)
 
 

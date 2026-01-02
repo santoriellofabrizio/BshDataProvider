@@ -22,10 +22,10 @@ class StockClassifier(BaseClassifier):
     def _build_maps(self):
         df = self._df
 
-        # ISIN → TICKER
+        # ISIN -> TICKER
         self.isin_to_ticker = df.set_index("ISIN")["TICKER"].to_dict()
 
-        # TICKER → ISIN
+        # TICKER -> ISIN
         self.ticker_to_isin = df.set_index("TICKER")["ISIN"].to_dict()
 
         self.isins = set(self.isin_to_ticker.keys())

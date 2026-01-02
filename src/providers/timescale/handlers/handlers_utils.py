@@ -5,7 +5,7 @@ import pandas as pd
 
 
 def _freq_to_seconds(freq: str) -> int:
-    # es: "5m" → 300
+    # es: "5m" -> 300
     freq = freq.lower()
     if freq.endswith("m"):
         return int(freq[:-1]) * 60
@@ -102,7 +102,7 @@ def _build_results(
             # ✅ Costruisce l'indice temporale come DatetimeIndex
             idx = pd.to_datetime(sub_df["DATE"] if is_daily else sub_df["TIMESTAMP"])
 
-            # Crea dizionario field → {timestamp: valore}
+            # Crea dizionario field -> {timestamp: valore}
             if is_daily:
                 # Daily: reindex su business_days per garantire date complete
                 results[req.instrument.id] = {

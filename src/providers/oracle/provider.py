@@ -115,7 +115,7 @@ class OracleProvider(BaseProvider):
                 config_dir=cfg_dict.get("config_dir"),
             )
             self.connection.connect()
-            logger.info("✅ OracleConnection established successfully")
+            logger.info("OracleConnection established successfully")
 
             # Query manager + fetcher
             self.query = QueryOracle(self.connection)
@@ -161,9 +161,9 @@ class OracleProvider(BaseProvider):
         grouped: Dict[str, List[BaseStaticRequest]] = defaultdict(list)
 
         for req in requests:
-            # se un campo è NAV o DIVIDEND → historical
-            # se PCF_COMPOSITION o FX_COMPOSITION → bulk
-            # se ETP_ISINS o FUTURES_DATA → general
+            # se un campo è NAV o DIVIDEND -> historical
+            # se PCF_COMPOSITION o FX_COMPOSITION -> bulk
+            # se ETP_ISINS o FUTURES_DATA -> general
             grouped[req.request_type].append(req)
 
         #  Esegue il fetch per ogni categoria

@@ -56,7 +56,7 @@ class Instrument:
             promoted = subclass.__new__(subclass)
             promoted.__dict__.update(self.__dict__)
             promoted.__post_init__()  # esegue validazioni della sottoclasse
-            logger.debug(f"Promoted Instrument → {subclass.__name__} (type={new_type})")
+            logger.debug(f"Promoted Instrument -> {subclass.__name__} (type={new_type})")
             return promoted  # restituisce la sottoclasse coerente
 
         return self
@@ -73,18 +73,13 @@ class EtfInstrument(Instrument):
     underlying_type: Optional[str] = None
     payment_policy: Literal["DIST", "ACC"] | None = None
     fund_currency: Optional[CurrencyEnum] = None
-    underlying_index: Optional[Literal["EQUITY", "FIXED INCOME", "COMMODITY"]] = None
+    underlying_index: Optional[Literal["EQUITY", "FIXED INCOME", "COMMODITY", "MONEY MARKET", "SPECIALY"]] = None
     index_provider: Optional[str] = None
     replication_method: Optional[str] = None
     issuer: Optional[IssuerGroup] = None
 
     def __post_init__(self):
         self.type = InstrumentType.ETP
-        if self.underlying_type is not None:
-            if self.underlying_type.upper() not in ["EQUITY", "FIXED INCOME", "COMMODITY"]:
-                raise ValueError("Instrument requires underlying type to EQUITY or FIXED INCOME")
-            self.underlying_type = self.underlying_type.upper()
-
         super().__post_init__()
 
 
@@ -162,7 +157,7 @@ class CurrencyInstrument(Instrument):
             if self.reference_currency is None:
                 raise ValueError(
                     f"SUBUNIT currency '{self.currency_code}' requires "
-                    f"reference_currency (e.g., GBX → GBP)"
+                    f"reference_currency (e.g., GBX -> GBP)"
                 )
 
 
@@ -243,7 +238,7 @@ class FutureInstrument(Instrument):
             promoted = subclass.__new__(subclass)
             promoted.__dict__.update(self.__dict__)
             promoted.__post_init__()
-            logger.debug(f"Promoted FutureInstrument → {subclass.__name__} (underlying={value_upper})")
+            logger.debug(f"Promoted FutureInstrument -> {subclass.__name__} (underlying={value_upper})")
             return promoted
 
         return self

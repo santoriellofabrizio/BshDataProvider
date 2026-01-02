@@ -7,9 +7,9 @@ logger = logging.getLogger(__name__)
 def respect_cache_kwarg(func):
     """
     Decoratore che controlla il kwarg 'cache':
-    - Se cache=True → forza la cache attiva
-    - Se cache=False → la disattiva
-    - Se non specificato → lascia lo stato invariato
+    - Se cache=True -> forza la cache attiva
+    - Se cache=False -> la disattiva
+    - Se non specificato -> lascia lo stato invariato
     Dopo l'esecuzione, ripristina lo stato iniziale.
     """
     @functools.wraps(func)
@@ -38,6 +38,6 @@ def respect_cache_kwarg(func):
                     enable_cache()
                 else:
                     disable_cache()
-                logger.debug(f"[CACHE RESTORED] {func.__qualname__} → {'ENABLED' if prev_state else 'DISABLED'}")
+                logger.debug(f"[CACHE RESTORED] {func.__qualname__} -> {'ENABLED' if prev_state else 'DISABLED'}")
 
     return wrapper

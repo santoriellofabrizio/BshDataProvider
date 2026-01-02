@@ -71,7 +71,7 @@ class RepoComponent(Component):
                        Mode 'currency': dates × currencies (rates per currency)
             mode: 'direct' or 'currency'
             future_currencies: Required if mode='currency'
-                              Series mapping instrument_id → currency code
+                              Series mapping instrument_id -> currency code
             settlement_days: Settlement lag (T+1=1, T+2=2, T+3=3)
             target: Optional list of instrument IDs to apply adjustments to
 
@@ -172,7 +172,7 @@ class RepoComponent(Component):
             return pd.DataFrame(0.0, index=dates_dt, columns=instrument_ids)
 
         # 4. Log processing
-        logger.info(
+        logger.debug(
             f"RepoComponent: Processing {len(applicable_ids)}/{len(instruments)} instruments"
         )
 

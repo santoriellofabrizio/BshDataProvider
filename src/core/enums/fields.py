@@ -126,7 +126,7 @@ class MarketField:
 
         if normalized != val:
             warnings.warn(
-                f"MarketField alias detected: '{value}' → '{normalized}'",
+                f"MarketField alias detected: '{value}' -> '{normalized}'",
                 category=UserWarning,
                 stacklevel=2,
             )

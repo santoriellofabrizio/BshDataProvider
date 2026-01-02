@@ -53,7 +53,7 @@ def test_timescale_multi_intraday_best_sampled(api, sample_isins):
 def test_timescale_daily_fairvalue(api, sample_isins):
     """Single daily ETF fairvalue snapshot."""
     res = api.market.get_daily_etf(
-        isin=sample_isins[0],
+        isin=sample_isins[0:10],
         start="2025-10-01",
         fields="mid",
         market="ETFP",

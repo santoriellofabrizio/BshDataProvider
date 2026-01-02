@@ -95,40 +95,36 @@ class BloombergProvider(BaseProvider):
 
         sample = requests[0]
 
-        # === Caso Snapshot (con snapshot_time) ===
-        if getattr(sample, "snapshot_time", None):
-            logger.debug("Dispatching Bloomberg snapshot fetch")
-            return self.fetcher.fetch_snapshot(requests)
-
         # === Caso Daily ===
-        elif "d" in str(sample.frequency).lower():
+        if "d" in str(sample.frequency).lower():
             logger.debug("Dispatching Bloomberg daily fetch")
             return self.fetcher.fetch_daily(requests)
+
+        # === Caso Snapshot (con snapshot_time) ===
+        elif getattr(sample, "snapshot_time", None):
+            logger.debug("Dispatching Bloomberg snapshot fetch")
+            return self.fetcher.fetch_snapshot(requests)
 
         # === Caso Intraday ===
         else:
             logger.debug("Dispatching Bloomberg intraday fetch")
-            results = {}
-            for req in requests:
-                ps = self.fetcher.fetch_intraday(req)
-                results[req.instrument.id] = ps
-            return results
+            return self.fetcher.fetch_intraday(requests)
 
     def fetch_info_data(self, requests: List[BaseStaticRequest]) -> None | dict | dict[Any, Any]:
         """
         Esegue richieste statiche Bloomberg (TER, YAS, DIVIDENDS o altri campi statici).
 
         Flow:
-        1. Aliasa i field di ogni richiesta: BSH → Bloomberg
+        1. Aliasa i field di ogni richiesta: BSH -> Bloomberg
         2. Passa le richieste aliasate all'handler
         3. Riceve i risultati con field Bloomberg
-        4. Rimappa i field indietro: Bloomberg → BSH
+        4. Rimappa i field indietro: Bloomberg -> BSH
         """
         if not requests:
             logger.warning("Empty static request list passed to BloombergProvider")
             return {}
 
-        # === Aliasa i field: BSH → Bloomberg ===
+        # === Aliasa i field: BSH -> Bloomberg ===
         aliased_requests = self._alias_request_fields(requests)
 
         first_req = aliased_requests[0]
@@ -148,13 +144,13 @@ class BloombergProvider(BaseProvider):
                 logger.error("Unknown request type: %s", first_req.request_type)
                 return {}
 
-        # === Rimappa i field: Bloomberg → BSH ===
+        # === Rimappa i field: Bloomberg -> BSH ===
         return self._remap_fields_from_bloomberg(raw_data)
 
 
     def _alias_request_fields(self, requests: List[BaseStaticRequest]) -> List[BaseStaticRequest]:
         """
-        Crea copie delle richieste con field aliasati: BSH → Bloomberg.
+        Crea copie delle richieste con field aliasati: BSH -> Bloomberg.
 
         Non modifica le richieste originali.
 
@@ -176,7 +172,7 @@ class BloombergProvider(BaseProvider):
             elif isinstance(req_copy.fields, list):
                 req_copy.fields = _get_bbg_field(req_copy.fields)
 
-            logger.debug("Aliased request for %s: %s → %s",
+            logger.debug("Aliased request for %s: %s -> %s",
                         req_copy.instrument.id, req.fields, req_copy.fields)
 
             aliased.append(req_copy)
@@ -202,7 +198,7 @@ class BloombergProvider(BaseProvider):
         if not raw_data:
             return raw_data
 
-        # Inverti la mappatura: Bloomberg → BSH
+        # Inverti la mappatura: Bloomberg -> BSH
         bbg_to_bsh = {v: k for k, v in BSH_TO_BBG.items()}
 
         remapped = {}
@@ -218,7 +214,7 @@ class BloombergProvider(BaseProvider):
                 remapped_fields[bsh_field] = value
 
                 if bsh_field != bbg_field:
-                    logger.debug("Remapped %s → %s for %s",
+                    logger.debug("Remapped %s -> %s for %s",
                                bbg_field, bsh_field, instr_id)
 
             remapped[instr_id] = remapped_fields
@@ -265,11 +261,11 @@ def _get_bbg_field(names):
 
 def _rename_fields(res: dict) -> dict:
     """
-    Rinomina i campi Bloomberg → BSH anche nel formato:
+    Rinomina i campi Bloomberg -> BSH anche nel formato:
         {isin: {campo: valore_serie_o_singolo}}
     Esempio:
         {'IE00B4L5Y983': {'PX_LAST': {...}, 'CCY': 'EUR'}}
-        → {'IE00B4L5Y983': {'NAV': {...}, 'NAV_CCY': 'EUR'}}
+        -> {'IE00B4L5Y983': {'NAV': {...}, 'NAV_CCY': 'EUR'}}
     """
     if not res:
         return res

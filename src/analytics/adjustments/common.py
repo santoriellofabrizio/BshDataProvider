@@ -84,11 +84,11 @@ def normalize_fx_columns(fx_prices: pd.DataFrame) -> pd.DataFrame:
     Normalize FX price columns from tickers to currency codes.
 
     Converts:
-        EURUSD → USD
-        EURGBP → GBP
-        EURJPY → JPY
-        USD    → USD (unchanged, warning)
-        USDEUR → USD (inverted, warning)
+        EURUSD -> USD
+        EURGBP -> GBP
+        EURJPY -> JPY
+        USD    -> USD (unchanged, warning)
+        USDEUR -> USD (inverted, warning)
 
     Args:
         fx_prices: DataFrame with FX prices
@@ -109,7 +109,7 @@ def normalize_fx_columns(fx_prices: pd.DataFrame) -> pd.DataFrame:
             # Extract quote currency (last 3 chars)
             currency = col_str[-3:]
             normalized_columns[col] = currency
-            logger.debug(f"Normalized FX column: {col} → {currency}")
+            logger.debug(f"Normalized FX column: {col} -> {currency}")
 
         # Case 2: 6-char inverted ticker (USDEUR, GBPEUR, etc.)
         elif len(col_str) == 6 and col_str.endswith('EUR'):
@@ -119,7 +119,7 @@ def normalize_fx_columns(fx_prices: pd.DataFrame) -> pd.DataFrame:
             columns_to_invert.append(col)
             logger.warning(
                 f"FX column '{col}' is inverted (base currency is not EUR). "
-                f"Inverting prices: 1/{col} → {currency}"
+                f"Inverting prices: 1/{col} -> {currency}"
             )
 
         # Case 3: 3-char currency code (USD, GBP, etc.)
@@ -141,7 +141,7 @@ def normalize_fx_columns(fx_prices: pd.DataFrame) -> pd.DataFrame:
     # Create normalized DataFrame
     fx_normalized = fx_prices.copy()
 
-    # Invert prices for inverted tickers (USDEUR → 1/USDEUR)
+    # Invert prices for inverted tickers (USDEUR -> 1/USDEUR)
     for col in columns_to_invert:
         logger.info(f"Inverting FX prices for {col}: new values = 1 / old values")
         fx_normalized[col] = 1.0 / fx_normalized[col]
@@ -160,8 +160,8 @@ def normalize_fx_columns(fx_prices: pd.DataFrame) -> pd.DataFrame:
         )
         fx_normalized = fx_normalized.loc[:, ~fx_normalized.columns.duplicated()]
 
-    logger.info(
-        f"FX columns normalized: {list(fx_prices.columns)} → {list(fx_normalized.columns)}"
+    logger.debug(
+        f"FX columns normalized: {list(fx_prices.columns)} -> {list(fx_normalized.columns)}"
     )
 
     return fx_normalized

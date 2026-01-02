@@ -23,7 +23,12 @@ class QueryTimeScale:
         self._password = password
 
     def create_connection(self) -> PostgreSQLConnection:
-        return PostgreSQLConnection(self._host, self._port, self._db_name, self._user, self._password)
+        try:
+            conn = PostgreSQLConnection(self._host, self._port, self._db_name, self._user, self._password)
+        except Exception as e:
+            conn = PostgreSQLConnection(self._port, self._db_name, self._user, self._password)
+        finally:
+            return conn
 
     def _get_results(self, query: str, date_: dt.date | None = None, market: str | None = None) -> Optional[pd.DataFrame]:
         conn = self.create_connection()

@@ -5,12 +5,12 @@ This module defines :class:`BloombergFetcher`, the unified interface for retriev
 all Bloomberg data types via BLPAPI using the chain of responsibility pattern.
 
 It delegates data retrieval to specialized handlers:
-    - ReferenceDataRequest → BloombergReferenceHandler
-    - HistoricalDataRequest (info) → BloombergHistoricalFieldHandler
-    - BulkDataRequest → BloombergBulkFieldHandler
-    - HistoricalDataRequest (market) → BloombergDailyPriceHandler
-    - IntradayBarRequest → BloombergIntradayPriceHandler
-    - Snapshot → BloombergSnapshotPriceHandler
+    - ReferenceDataRequest -> BloombergReferenceHandler
+    - HistoricalDataRequest (info) -> BloombergHistoricalFieldHandler
+    - BulkDataRequest -> BloombergBulkFieldHandler
+    - HistoricalDataRequest (market) -> BloombergDailyPriceHandler
+    - IntradayBarRequest -> BloombergIntradayPriceHandler
+    - Snapshot -> BloombergSnapshotPriceHandler
 
 Responsibilities:
     - Initialize handler chains for different request types
@@ -187,7 +187,7 @@ class BloombergFetcher(BaseFetcher):
     # ============================================================
 
     @cache_bsh_data
-    def fetch_intraday(self, requests: List[IntradayRequest]) -> dict:
+    def fetch_intraday(self, requests: List[BaseMarketRequest]) -> dict:
         """
         Fetch intraday bar data for a single instrument.
 

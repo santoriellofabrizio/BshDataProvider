@@ -26,7 +26,7 @@ class CdxComponent(Component):
     Similar to repo but for credit instruments - spread represents carry cost.
 
     Usage:
-        # CDX spreads per instrument (basis points → decimal)
+        # CDX spreads per instrument (basis points -> decimal)
         cdx_spreads = pd.DataFrame({
             'CDX_INDEX_1': [0.0120, 0.0125],  # 120-125 bps
             'CDX_INDEX_2': [0.0095, 0.0098],  # 95-98 bps

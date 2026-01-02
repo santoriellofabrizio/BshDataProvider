@@ -110,7 +110,7 @@ class QueryOracle:
         if field not in valid_fields:
             raise ValueError(f"Invalid field '{field}'. Must be one of: {', '.join(sorted(valid_fields))}")
 
-        # includo sempre TICKER per chiave → se chiedi TICKER ti arriva solo TICKER
+        # includo sempre TICKER per chiave -> se chiedi TICKER ti arriva solo TICKER
         select_fields = "TICKER" if field == "TICKER" else f"TICKER, {field}"
 
         query = f"""
@@ -584,7 +584,7 @@ class QueryOracle:
 
         day = day or dt.date.today()
         placeholders, params = self._in_clause("id", isin_list)
-        params["ref_date"] = day.strftime("%d-%m-%Y")
+        params["ref_date"] = day.strftime("%d-%m-%Y") if not isinstance(day, str) else day
         table_name = "PCF_FX_COMPOSITION_ONLINE" if (today().date() - day).days <= 28 else "PCF_FX_COMPOSITION"
 
         query = f"""
@@ -748,7 +748,7 @@ class QueryOracle:
             isins: Lista di ISIN
             start: Data inizio
             end: Data fine (default: oggi)
-            corr_id_mapping: Mappatura ISIN → correlation_id alternativo
+            corr_id_mapping: Mappatura ISIN -> correlation_id alternativo
 
         Returns:
             {isin: {"NAV": {date: value, ...}}}
@@ -800,7 +800,7 @@ class QueryOracle:
             isins: Lista di ISIN
             start: Data inizio
             end: Data fine (default: oggi)
-            corr_id_mapping: Mappatura ISIN → correlation_id alternativo
+            corr_id_mapping: Mappatura ISIN -> correlation_id alternativo
 
         Returns:
             {isin: {"DIVIDEND_AMOUNT": {date: value, ...}}}
@@ -904,12 +904,12 @@ class QueryOracle:
         else:
             return {k: next((t for t, i in data if i == k), None) for k in keys}
 
-    # Wrapper: ticker → ISIN
+    # Wrapper: ticker -> ISIN
     @cache_bsh_data
     def get_isin_by_ticker(self, ticker: Union[str, List[str]], type: Optional[str]) -> Dict[str, Optional[str]]:
         return self._map_ticker_isin(ticker, type, direction="ticker_to_isin")
 
-    # Wrapper: ISIN → ticker
+    # Wrapper: ISIN -> ticker
     @cache_bsh_data
     def get_ticker_by_isin(self, isin: Union[str, List[str]], type: Optional[str], market: Optional[None]= None)\
             -> Dict[str, Optional[str]]:

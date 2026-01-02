@@ -154,12 +154,12 @@ class Handler(ABC):
         Normalize output to format A: {FIELD: {subscription: value}}
 
         Supports two input formats:
-            Format A: {FIELD: {subscription: value}}  → Already normalized
-            Format B: {subscription: {FIELD: value}}  → Needs inversion
+            Format A: {FIELD: {subscription: value}}  -> Already normalized
+            Format B: {subscription: {FIELD: value}}  -> Needs inversion
 
         Detection strategy:
-            If any top-level key matches a requested field → Format A
-            Otherwise → Format B
+            If any top-level key matches a requested field -> Format A
+            Otherwise -> Format B
 
         Args:
             out: Raw output from process()
@@ -184,11 +184,11 @@ class Handler(ABC):
 
         keys = list(out.keys())
 
-        # Check if any top-level key is a requested field → Format A
+        # Check if any top-level key is a requested field -> Format A
         if any(k.upper() in requested_fields for k in keys):
             return out  # Already in format A
 
-        # Otherwise → Format B, needs inversion
+        # Otherwise -> Format B, needs inversion
         normalized = {}
         for sub, fieldmap in out.items():
             if isinstance(fieldmap, dict):

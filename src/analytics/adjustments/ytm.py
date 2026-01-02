@@ -152,7 +152,7 @@ class YtmComponent(Component):
             return pd.DataFrame(0.0, index=dates_dt, columns=instrument_ids)
 
         # 4. Log processing
-        logger.info(
+        logger.debug(
             f"YtmComponent: Processing {len(applicable_ids)}/{len(instruments)} instruments"
         )
 

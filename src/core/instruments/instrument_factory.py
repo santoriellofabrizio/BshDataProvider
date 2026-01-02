@@ -327,7 +327,7 @@ class InstrumentFactory(Singleton):
         if autocomplete:
             if not ticker and family:
                 if not tenor:
-                    logger.warning(f"Index specified only as family '{family}'. TENOR missing → using default 1D.")
+                    logger.warning(f"Index specified only as family '{family}'. TENOR missing -> using default 1D.")
                     tenor = "1D"
 
             if not family and ticker:

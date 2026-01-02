@@ -128,8 +128,8 @@ class GeneralDataAPI(BaseAPI):
         La cache globale usa joblib.Memory per evitare query ripetute.
 
         Parametri:
-            - api.enable_cache()  → attiva la cache
-            - api.disable_cache() → disattiva completamente
+            - api.enable_cache()  -> attiva la cache
+            - api.disable_cache() -> disattiva completamente
 
         Esempio:
             api = BshData(cache=True)

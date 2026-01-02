@@ -16,7 +16,7 @@ class Market(Enum):
     @staticmethod
     def _load_config(config_path: Optional[str] = None) -> dict[str, dict[str, str]]:
         """
-        Carica e normalizza la configurazione YAML provider→mercato.
+        Carica e normalizza la configurazione YAML provider->mercato.
         Non usa attributi di classe e cache: è una funzione pura.
         """
         yaml = YAML(typ="safe")

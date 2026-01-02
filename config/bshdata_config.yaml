@@ -1,16 +1,16 @@
-#timescale_connection:
-#  db_name: aidb
-#  port: 5432
-#  host: timescaledb.af.pro
-#  user: aivwr
-#  password: Aivwr-00
-#
-#oracle_connection:
-#  environment: PROD
-#  user: AF_QUANTLIB
-#  tns_name: ORABOH
-#  password: b18289f251b94f0e1a819df7c7a0fb2e9fabf457ba67b5bbf584478db8c8c17e
-#  schema: AF_DATAMART_DBA
+timescale_connection:
+  db_name: aidb
+  port: 5432
+  host: timescaledb.af.pro
+  user: aivwr
+  password: Aivwr-00
+
+oracle_connection:
+  environment: PROD
+  user: AF_QUANTLIB
+  tns_name: ORABOH
+  password: b18289f251b94f0e1a819df7c7a0fb2e9fabf457ba67b5bbf584478db8c8c17e
+  schema: AF_DATAMART_DBA
 
 
 client:
