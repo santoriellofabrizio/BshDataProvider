@@ -33,11 +33,11 @@ class Component(ABC):
         
         chain = (
             TerComponent(ter)
-            .add(FxSpotComponent(weights, fx_prices))
+            .add(FxSpotComponent(weights, fx_prices_intraday))
             .add(FxForwardCarryComponent(...))
             .add(DividendComponent(divs))
         )
-        adjuster.add_chain(chain)
+        intraday_adjuster.add_chain(chain)
     
     Attributes:
         target: Optional set of instrument IDs to apply adjustments to
@@ -166,7 +166,7 @@ class Component(ABC):
         """
         Calculate adjustments (vectorized).
 
-        NEW SIGNATURE: No fx_prices parameter!
+        NEW SIGNATURE: No fx_prices_intraday parameter!
         Each component stores its own data dependencies.
 
         Args:
@@ -245,12 +245,12 @@ class Component(ABC):
         Example:
             chain = (
                 TerComponent(ter)
-                .add(FxSpotComponent(weights, fx_prices))
+                .add(FxSpotComponent(weights, fx_prices_intraday))
                 .add(FxForwardCarryComponent(...))
                 .add(DividendComponent(divs))
             )
 
-            adjuster.add_chain(chain)
+            intraday_adjuster.add_chain(chain)
         """
         self._children.append(component)
         logger.debug(f"{self.__class__.__name__}.add({component.__class__.__name__})")
@@ -311,9 +311,9 @@ class Component(ABC):
 
         Example:
             # In FxSpotComponent
-            def append_data(self, *, fx_prices: Optional[pd.DataFrame] = None):
-                if fx_prices is not None:
-                    self._fx_prices = pd.concat([self._fx_prices, fx_prices])
+            def append_data(self, *, fx_prices_intraday: Optional[pd.DataFrame] = None):
+                if fx_prices_intraday is not None:
+                    self._fx_prices = pd.concat([self._fx_prices, fx_prices_intraday])
         """
         pass
 
@@ -329,7 +329,7 @@ class Component(ABC):
         Example:
             # In FxSpotComponent
             def _save_state(self) -> dict:
-                return {'fx_prices': self._fx_prices.copy()}
+                return {'fx_prices_intraday': self._fx_prices.copy()}
         """
         return {}
 
@@ -345,7 +345,7 @@ class Component(ABC):
         Example:
             # In FxSpotComponent
             def _restore_state(self, state: dict) -> None:
-                self._fx_prices = state['fx_prices']
+                self._fx_prices = state['fx_prices_intraday']
         """
         pass
 
@@ -361,10 +361,10 @@ class Component(ABC):
 
         Example:
             # In FxSpotComponent
-            def _apply_temp_data(self, *, fx_prices: Optional[pd.DataFrame] = None):
-                if fx_prices is not None:
-                    # Temporarily extend fx_prices
-                    self._fx_prices = pd.concat([self._fx_prices, fx_prices])
+            def _apply_temp_data(self, *, fx_prices_intraday: Optional[pd.DataFrame] = None):
+                if fx_prices_intraday is not None:
+                    # Temporarily extend fx_prices_intraday
+                    self._fx_prices = pd.concat([self._fx_prices, fx_prices_intraday])
         """
         pass
 

@@ -86,24 +86,20 @@ class EquityHandler(Handler):
 
         rows = []
         for current_day in business_days:
-            for sub in subs:
-                r = req_by_sub[sub]
+            df = query.best_sampled_isin_currency(
+                date=current_day.date(),
+                market=market,
+                currency=currency,
+                isin=subs,
+                seconds_sampling=sec,
+                segment=segment,
+            )
 
-                df = query.best_sampled_isin_currency(
-                    date=current_day.date(),
-                    market=market,
-                    currency=currency,
-                    isin=sub,
-                    seconds_sampling=sec,
-                    segment=segment,
-                )
+            df = _normalize_dataframe(df)
 
-                df = _normalize_dataframe(df)
-
-                if df is not None and not df.empty:
-                    df["isin"] = sub
-                    df["date"] = current_day.date()  # traccia giorno intraday
-                    rows.append(df)
+            if df is not None and not df.empty:
+                df["date"] = current_day.date()  # traccia giorno intraday
+                rows.append(df)
 
         df_all = pd.concat(rows, ignore_index=True) if rows else pd.DataFrame()
 
@@ -116,4 +112,3 @@ class EquityHandler(Handler):
             fstart=first.start,
             fend=first.end,
         )
-

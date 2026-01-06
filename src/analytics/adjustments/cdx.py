@@ -32,7 +32,7 @@ class CdxComponent(Component):
             'CDX_INDEX_2': [0.0095, 0.0098],  # 95-98 bps
         }, index=dates)
 
-        adjuster.add(CdxComponent(cdx_spreads, settlement_days=2))
+        intraday_adjuster.add(CdxComponent(cdx_spreads, settlement_days=2))
     """
 
     def __init__(

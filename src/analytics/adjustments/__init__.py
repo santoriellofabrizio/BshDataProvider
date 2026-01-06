@@ -10,13 +10,13 @@ Usage:
     from bshdata.analytics.adjustments import Adjuster
     from bshdata.analytics.adjustments.components.etf import TerComponent, YtmComponent
     
-    adjuster = (
-        Adjuster(prices, fx_prices, instruments)
+    intraday_adjuster = (
+        Adjuster(prices, fx_prices_intraday, instruments)
         .add(TerComponent(ters))
         .add(YtmComponent(ytms))
     )
     
-    adjustments = adjuster.calculate()
+    adjustments = intraday_adjuster.calculate()
 """
 
 

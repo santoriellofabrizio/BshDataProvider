@@ -102,7 +102,7 @@ def normalize_fx_columns(fx_prices: pd.DataFrame) -> pd.DataFrame:
     columns_to_invert = []  # Track which columns need 1/price
 
     for col in fx_prices.columns:
-        col_str = str(col).upper()
+        col_str = str(col)
 
         # Case 1: 6-char EUR-based ticker (EURUSD, EURGBP, etc.)
         if len(col_str) == 6 and col_str.startswith('EUR'):

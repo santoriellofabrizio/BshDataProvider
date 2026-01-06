@@ -34,13 +34,13 @@ class FxSpotComponent(Component):
     Usage:
         # Initialize
         fx_comp = FxSpotComponent(fx_composition, fx_prices)
-        adjuster = Adjuster(prices).add(fx_comp)
+        intraday_adjuster = Adjuster(prices).add(fx_comp)
 
         # Append mode: permanently add new data
-        adjuster.append_update(fx_prices=new_fx_prices)
+        intraday_adjuster.append_update(fx_prices=new_fx_prices)
 
         # Live mode: temporary calculation without storage
-        adjuster.live_update(fx_prices=live_fx_prices)
+        intraday_adjuster.live_update(fx_prices=live_fx_prices)
     """
 
     # Sanity check bounds for composition sum

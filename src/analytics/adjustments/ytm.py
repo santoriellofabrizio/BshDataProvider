@@ -34,7 +34,7 @@ class YtmComponent(Component):
             'INDEX_ISIN': [0.038, 0.039],      # Index
         }, index=dates)
 
-        adjuster.add(YtmComponent(ytm, settlement_days=2))
+        intraday_adjuster.add(YtmComponent(ytm, settlement_days=2))
     """
 
     def __init__(

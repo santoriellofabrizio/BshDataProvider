@@ -59,8 +59,7 @@ class StaticRequestBuilder:
             raise TypeError("source must be a DataSource enum")
         if params.get("start") and params.get("end"):
             s, e = params["start"], params["end"]
-            if isinstance(s, (date, datetime)) and isinstance(e, (date, datetime)) and s > e:
-                raise ValueError("start date cannot be after end date")
+
 
     @staticmethod
     def build(

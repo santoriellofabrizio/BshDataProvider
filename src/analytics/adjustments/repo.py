@@ -34,7 +34,7 @@ class RepoComponent(Component):
             'FUTURE_2': [0.028, 0.029],
         }, index=dates)
 
-        adjuster.add(RepoComponent(repo_rates, mode='direct'))
+        intraday_adjuster.add(RepoComponent(repo_rates, mode='direct'))
 
         # Mode 2: Currency-based rates
         repo_rates = pd.DataFrame({
@@ -47,7 +47,7 @@ class RepoComponent(Component):
             'FUTURE_2': 'EUR',
         })
 
-        adjuster.add(RepoComponent(
+        intraday_adjuster.add(RepoComponent(
             repo_rates,
             mode='currency',
             future_currencies=future_currencies

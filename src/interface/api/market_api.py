@@ -257,6 +257,8 @@ class MarketDataAPI(BaseAPI):
                 end='2024-12-31'
             )
         """
+        self.client.tracker.reset()
+
         # Mode 2: pre-built instruments
         if instruments is not None:
             return self.get_with_instruments(
@@ -279,13 +281,13 @@ class MarketDataAPI(BaseAPI):
         n = len(ids)
 
         # Create mock instruments with IDs for normalize_param
-        class _MockInstrument:
+        class _InitInstrument:
             def __init__(self, id_): self.id = id_
-        mock_instruments = [_MockInstrument(id_) for id_ in ids]
+        init_instruments = [_InitInstrument(id_) for id_ in ids]
 
-        currency = normalize_param(currency, mock_instruments, default="EUR")
-        market = normalize_param(market, mock_instruments, default=None)
-        type_ = normalize_param(type, mock_instruments, default=None)
+        currency = normalize_param(currency, init_instruments, default="EUR")
+        market = normalize_param(market, init_instruments, default=None)
+        type_ = normalize_param(type, init_instruments, default=None)
 
         # Separate instrument-building params from request params
         instrument_build_params = {

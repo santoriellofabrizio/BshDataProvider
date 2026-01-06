@@ -219,7 +219,7 @@ class DividendComponent(Component):
                 ]
                 
                 if len(price_timestamps_before) == 0:
-                    logger.warning(
+                    logger.info(
                         f"DividendComponent: {inst_id}: No price before dividend {div_date_only}. "
                         "Skipping dividend adjustment."
                     )

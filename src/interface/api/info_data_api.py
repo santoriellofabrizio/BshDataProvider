@@ -377,7 +377,7 @@ class InfoDataAPI(BaseAPI):
             return renamed
 
         except Exception as e:
-            logger.warning("Failed to rename fields: %s", e)
+            logger.info("Failed to rename fields: %s", e)
             return result
 
     # ============================================================

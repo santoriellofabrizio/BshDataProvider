@@ -25,12 +25,12 @@ class Adjuster:
     Update Modes:
     -------------
     1. Append Mode: Permanently store new data and calculate incrementally
-       - Use: append_update(prices=..., fx_prices=..., recalc_last_n=1)
+       - Use: append_update(prices=..., fx_prices_intraday=..., recalc_last_n=1)
        - Stores: New prices + new adjustments in cache
        - Calculates: Only new dates (plus recalc_last_n previous dates)
 
     2. Live Update Mode: Temporary calculation without storage
-       - Use: live_update(prices=..., fx_prices=...)
+       - Use: live_update(prices=..., fx_prices_intraday=...)
        - Stores: Nothing (all temporary)
        - Calculates: New dates only, then discards
        - Returns: Calculated adjustments
@@ -39,21 +39,21 @@ class Adjuster:
     ------
         # Setup
         ter = TerComponent(ter_data)
-        fx_spot = FxSpotComponent(fx_comp, fx_prices)
-        adjuster = Adjuster(prices).add(ter).add(fx_spot)
+        fx_spot = FxSpotComponent(fx_comp, fx_prices_intraday)
+        intraday_adjuster = Adjuster(prices).add(ter).add(fx_spot)
 
         # Append mode: Store new end-of-day data
-        adjuster.append_update(
+        intraday_adjuster.append_update(
             prices=new_eod_prices,
-            fx_prices=new_fx_prices,
+            fx_prices_intraday=new_fx_prices,
             recalc_last_n=1
         )
-        adjustments = adjuster.calculate()
+        adjustments = intraday_adjuster.calculate()
 
         # Live mode: Intraday updates without storage
-        live_adj = adjuster.live_update(
+        live_adj = intraday_adjuster.live_update(
             prices=live_prices,
-            fx_prices=live_fx_prices
+            fx_prices_intraday=live_fx_prices
         )
     """
 
@@ -71,7 +71,7 @@ class Adjuster:
             return_type: Literal["percentage", "logarithmic", "absolute"] = "percentage",
     ):
         """
-        Initialize adjuster.
+        Initialize intraday_adjuster.
 
         Args:
             prices: DataFrame with instrument prices (dates × instruments)
@@ -325,7 +325,7 @@ class Adjuster:
             dates: Optional subset of dates
             cumulative: If True, return forward cumulative returns
             live_prices: Optional live prices for temporary calculation
-            **live_component_data: Optional live component data (fx_prices, etc.)
+            **live_component_data: Optional live component data (fx_prices_intraday, etc.)
 
         Returns:
             DataFrame(dates × instruments) with clean returns
@@ -422,7 +422,7 @@ class Adjuster:
             prices: New prices to append
             recalc_last_n: Number of previous dates to recalculate
                           -1 = full recalculation, 0 = only new dates, N = new + last N
-            **component_data: Component updates (fx_prices, dividends, etc.)
+            **component_data: Component updates (fx_prices_intraday, dividends, etc.)
 
         Returns:
             Self for method chaining
@@ -524,7 +524,7 @@ class Adjuster:
 
         if updated:
             mode = "temporary" if temp else "permanent"
-            logger.info(f"Updated components ({mode}): {', '.join(updated)}")
+            logger.debug(f"Updated components ({mode}): {', '.join(updated)}")
 
     # =========================================================================
     # Live Context Manager

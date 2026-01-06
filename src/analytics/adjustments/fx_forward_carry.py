@@ -538,7 +538,7 @@ class FxForwardCarryComponent(Component):
     @property
     def updatable_fields(self) -> set[str]:
         """Declare updatable fields (subscription model)"""
-        return {"fx_forward_prices", "fx_prices"}
+        return {"fx_forward_prices", "fx_prices_intraday"}
 
     def append_data(
         self,
@@ -586,9 +586,9 @@ class FxForwardCarryComponent(Component):
         if fx_prices is not None:
             # Validate
             if not isinstance(fx_prices, pd.DataFrame):
-                raise ValueError("fx_prices must be DataFrame")
+                raise ValueError("fx_prices_intraday must be DataFrame")
             if fx_prices.empty:
-                raise ValueError("fx_prices cannot be empty")
+                raise ValueError("fx_prices_intraday cannot be empty")
 
             # Normalize columns
             new_fx_spot = self._normalize_fx_columns(fx_prices, "spot")
@@ -602,7 +602,7 @@ class FxForwardCarryComponent(Component):
             self.fx_spot_prices = self.fx_spot_prices[~self.fx_spot_prices.index.duplicated(keep='last')]
 
             logger.debug(
-                f"FxForwardCarryComponent: Appended fx_prices "
+                f"FxForwardCarryComponent: Appended fx_prices_intraday "
                 f"(now {len(self.fx_spot_prices)} rows)"
             )
 

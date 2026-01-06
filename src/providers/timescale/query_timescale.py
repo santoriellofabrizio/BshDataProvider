@@ -1,5 +1,5 @@
 import datetime as dt
-from typing import List, Optional
+from typing import List, Optional, Union
 import numpy as np
 import pandas as pd
 
@@ -274,14 +274,17 @@ class QueryTimeScale:
 
     @cache_bsh_data
     def best_sampled_isin_currency(
-        self,
-        date: dt.date,
-        market: str,
-        isin: str,
-        seconds_sampling: int,
-        currency: str = 'EUR',
-        segment: Optional[str] = None
+            self,
+            date: dt.date,
+            market: str,
+            isin: Union[str, List[str]],
+            seconds_sampling: int,
+            currency: str = 'EUR',
+            segment: Optional[str] = None
     ):
+        isins = [isin] if isinstance(isin, str) else isin
+        isin_list = ','.join(f"'{i}'" for i in isins)
+        isin_filter = f"a.isin IN ({isin_list})"
         date_start = date.strftime("%Y-%m-%d")
         date_end = (date + dt.timedelta(days=1)).strftime("%Y-%m-%d")
         query = f'''
@@ -297,7 +300,7 @@ class QueryTimeScale:
                 where b.datetime >= '{date_start}' 
                   and b.datetime < '{date_end}'
                   and b.id_strumento = a.id_strumento
-                  and a.isin = '{isin}'
+                  and {isin_filter}
                   and a.cache_provenienza = '{market}'
                   and a.divisa = '{currency}'
                   {f"AND a.segmento = '{segment}'" if segment else ""}
@@ -309,6 +312,7 @@ class QueryTimeScale:
             order by isin, datetime_sampled
         '''
         return self._get_results(query, date)
+
 
     @cache_bsh_data
     def best_sampled_currency(

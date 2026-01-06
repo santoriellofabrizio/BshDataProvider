@@ -19,7 +19,7 @@ Typical usage:
     >>> 
     >>> # Access results
     >>> clean_returns = pipeline.clean_returns
-    >>> raw_prices = pipeline.etf_prices
+    >>> raw_prices = pipeline.etf_prices_intraday
     
     # Con override:
     >>> pipeline = EtfDataPipeline(api, instruments, start, end)
@@ -307,7 +307,7 @@ class EtfDataPipeline:
 
     def load(self) -> "EtfDataPipeline":
         """
-        Load all data and build adjuster.
+        Load all data and build intraday_adjuster.
         
         Scarica automaticamente tutti i dati necessari.
         Usa gli override se impostati.
@@ -332,7 +332,7 @@ class EtfDataPipeline:
         if self.config.adjust_ter:
             self._load_ter()
 
-        # 5. Build adjuster
+        # 5. Build intraday_adjuster
         self._build_adjuster()
 
         self._is_loaded = True
