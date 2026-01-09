@@ -1,6 +1,9 @@
 import logging
 from abc import ABC, abstractmethod
+from contextlib import contextmanager
 from typing import Optional, List, Dict, Any
+
+from tqdm import tqdm
 
 from core.holidays.holiday_manager import HolidayManager
 from core.requests.requests import BaseRequest
@@ -25,7 +28,8 @@ class Handler(ABC):
         6. Forward remaining requests to next handler
     """
 
-    def __init__(self):
+    def __init__(self, show_progress: bool = True):
+        self.show_progress = show_progress
         self._next: Optional['Handler'] = None
         self.holiday_manager = HolidayManager()
 
@@ -222,11 +226,41 @@ class Handler(ABC):
         """
         pass
 
+    @contextmanager
+    def progress(self, desc: str, total: Optional[int] = None):
+        """
+        Context manager for tqdm progress bars.
 
-class MarketDataHandler(Handler, ABC):
-    """
-    Abstract base class for market data handlers.
+        Args:
+            desc (str): Description for the progress bar.
+            total (int, optional): Total iterations count.
 
-    Market data handlers process time-series market data (prices, volumes, etc).
-    """
-    pass
+        Example:
+            with self.progress("Fetching EUREX", total=len(days)) as pbar:
+                for d in days:
+                    ...
+                    pbar.update(1)
+        """
+        if not self.show_progress or not total or total <= 1:
+            # Dummy bar if disabled or trivial
+            class DummyBar:
+                def update(self, *_): pass
+
+                def close(self): pass
+
+            yield DummyBar()
+            return
+
+        pbar = tqdm(
+            total=total,
+            desc=desc,
+            dynamic_ncols=True,
+            leave=True,
+            bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}]"
+        )
+        try:
+            yield pbar
+        finally:
+            pbar.close()
+
+

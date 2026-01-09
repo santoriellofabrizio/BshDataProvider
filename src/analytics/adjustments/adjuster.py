@@ -151,11 +151,16 @@ class Adjuster:
 
     def _prepare_new_prices(self, prices: pd.DataFrame) -> pd.DataFrame:
         """Validate, normalize index, and align columns for new prices."""
+
+        if isinstance(prices, pd.Series):
+            ts = self._get_current_timestamp()
+            prices = prices.to_frame(ts).T
+
         prices = self._validate_and_transpose(prices, "prices")
 
         # Handle non-temporal index
         if not isinstance(prices.index, pd.DatetimeIndex):
-            ts = pd.Timestamp.now() if self.intraday else pd.Timestamp.now().normalize()
+            ts = self._get_current_timestamp()
             prices.index = pd.DatetimeIndex([ts])
             logger.debug(f"Non-temporal index detected, using timestamp={ts}")
         elif not self.intraday:
@@ -167,7 +172,8 @@ class Adjuster:
     def _get_current_timestamp(self) -> pd.Timestamp:
         """Get current timestamp, normalized if not intraday."""
         ts = pd.Timestamp.now()
-        return ts if self.intraday else ts.normalize()
+        self._last_update_timestamp = ts if self.intraday else ts.normalize()
+        return self._last_update_timestamp
 
     # =========================================================================
     # Validation Methods
@@ -183,8 +189,8 @@ class Adjuster:
 
         # Check if needs transposing
         needs_transpose = (
-            isinstance(df.columns, pd.DatetimeIndex) or
-            (isinstance(df.index[0], str) and isinstance(df.columns[0], (date, pd.Timestamp)))
+                isinstance(df.columns, pd.DatetimeIndex) or
+                (isinstance(df.index[0], str) and isinstance(df.columns[0], (date, pd.Timestamp)))
         )
 
         if needs_transpose:
@@ -332,11 +338,26 @@ class Adjuster:
         """
         # Live mode
         if live_prices is not None or live_component_data:
-            live_prices = self._ensure_dataframe(live_prices)
+            live_prices = self._prepare_new_prices(live_prices)
             with self._live_context(prices=live_prices, **live_component_data):
                 return self._compute_clean_returns(dates, cumulative)
 
         return self._compute_clean_returns(dates, cumulative)
+
+    def get_raw_returns(self,
+                        cumulative: bool = False,
+                        live_prices: Optional[pd.DataFrame | pd.Series] = None,
+                        **live_component_data,
+                        ) -> pd.DataFrame | None:
+
+        if live_prices is not None or live_component_data:
+            live_prices = self._prepare_new_prices(live_prices)
+            with self._live_context(prices=live_prices, **live_component_data):
+                rets = self.return_calculator.calculate_returns(self._prices)
+                return (1 + rets).iloc[::-1].cumprod().iloc[::-1] - 1 if cumulative else rets
+
+        rets = self.return_calculator.calculate_returns(self._prices)
+        return (1 + rets).iloc[::-1].cumprod().iloc[::-1] - 1 if cumulative else rets
 
     def _compute_clean_returns(self, dates: Optional[list], cumulative: bool) -> pd.DataFrame:
         """Core clean returns calculation logic."""
@@ -515,7 +536,7 @@ class Adjuster:
 
             for component in self._subscriptions[field]:
                 try:
-                    getattr(component, method)(**{field: data})
+                    getattr(component, method)(**{field: data}, timestamp=self._last_update_timestamp)
                     comp_name = component.__class__.__name__
                     if comp_name not in updated:
                         updated.append(comp_name)

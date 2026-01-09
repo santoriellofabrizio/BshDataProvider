@@ -22,7 +22,7 @@ class EquityHandler(Handler):
         fields = first.fields if isinstance(first.fields, list) else [first.fields]
         is_daily = "d" in str(first.frequency).lower()
 
-        subs = [r.subscription or r.instrument.id for r in requests]
+        subs = tuple(sorted(r.subscription or r.instrument.id for r in requests))
         req_by_sub = {sub: r for sub, r in zip(subs, requests)}
 
         # Market / segment
@@ -42,19 +42,22 @@ class EquityHandler(Handler):
             all_rows = []
 
             # Ciclo su tutte le date richieste
-            for dt in business_days:
-                df_dt = query.fairvalue_array_isin_currency(
-                    date=dt,
-                    market=market,
-                    currency=currency,
-                    array_isin=sorted(subs),
-                    fairvalue_time=snapshot_time,
-                    segment=segment,
-                )
+            with self.progress(f"Fetching daily equity data - {market} - {currency}", len(business_days)) as pbar:
+                for dt in business_days:
+                    df_dt = query.fairvalue_array_isin_currency(
+                        date=dt,
+                        market=market,
+                        currency=currency,
+                        array_isin=subs,
+                        fairvalue_time=snapshot_time,
+                        segment=segment,
+                    )
 
-                if df_dt is not None and not df_dt.empty:
-                    df_dt["date"] = dt
-                    all_rows.append(df_dt)
+                    if df_dt is not None and not df_dt.empty:
+                        df_dt["date"] = dt
+                        all_rows.append(df_dt)
+
+                    pbar.update(1)
 
             # Concateno tutti i risultati
             if not all_rows:
@@ -85,21 +88,24 @@ class EquityHandler(Handler):
         sec = _freq_to_seconds(first.frequency)
 
         rows = []
-        for current_day in business_days:
-            df = query.best_sampled_isin_currency(
-                date=current_day.date(),
-                market=market,
-                currency=currency,
-                isin=subs,
-                seconds_sampling=sec,
-                segment=segment,
-            )
+        with self.progress(f"Fetching intraday equity data - {market} - {currency}", len(business_days)) as pbar:
+            for current_day in business_days:
+                df = query.best_sampled_isin_currency(
+                    date=current_day.date(),
+                    market=market,
+                    currency=currency,
+                    isin=subs,
+                    seconds_sampling=sec,
+                    segment=segment,
+                )
 
-            df = _normalize_dataframe(df)
+                df = _normalize_dataframe(df)
 
-            if df is not None and not df.empty:
-                df["date"] = current_day.date()  # traccia giorno intraday
-                rows.append(df)
+                if df is not None and not df.empty:
+                    df["date"] = current_day.date()  # traccia giorno intraday
+                    rows.append(df)
+
+                pbar.update(1)
 
         df_all = pd.concat(rows, ignore_index=True) if rows else pd.DataFrame()
 

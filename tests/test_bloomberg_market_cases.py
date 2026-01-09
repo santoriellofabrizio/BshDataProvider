@@ -171,7 +171,7 @@ def test_bloomberg_swap(api: BshData):
     print("\n========== TEST BLOOMBERG NAV ==========")
     nav = api.market.get(id=["EUZCISWAP1", "EUZCISWAP10"],
                          fields="MID", source="bloomberg",
-                         type=InstrumentType.SWAP, start='2025-12-11')
+                         type=InstrumentType.SWAP, start='2025-12-11', end=today())
     df = pd.DataFrame.from_dict(nav)
     print(f"Fetched {len(df)} MID rows for EUZCISWAP1")
     print(df.head(10).to_string(index=True))

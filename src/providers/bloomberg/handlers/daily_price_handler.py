@@ -87,13 +87,13 @@ class BloombergDailyPriceHandler(DailyPriceHandler, BaseFetcher):
 
         # Make request and collect responses
         results = {}
-        with tqdm(total=len(business_days),
-                  desc=f"Fetching Bloomberg daily ({market})",
-                  disable=not self.show_progress) as pbar:
+        with self.progress(f"Fetching daily data (BLOOMBERG) {start_date:%Y-%m-%d} -> {end_date:%Y-%m-%d}",
+                           total=1) as pbar:
             try:
                 req = self._make_historical_request(service, subs, fields, start_date, end_date)
                 session.sendRequest(req)
                 data = self._collect_historical_responses(session, results, fields)
+                pbar.update(1)
             except Exception as e:
                 logger.warning("Historical fetch failed: %s", e)
                 return {}

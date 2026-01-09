@@ -38,7 +38,7 @@ class FxForwardCarryComponent(Component):
     """
 
     # Sanity check for rate differentials (±10% = reasonable annual rate diff)
-    MAX_REASONABLE_RATE_DIFF = 0.10
+    MAX_REASONABLE_RATE_DIFF = 0.15
     
     # Tenor mapping for annualization
     TENOR_MONTHS = {
@@ -145,13 +145,12 @@ class FxForwardCarryComponent(Component):
         dates: Union[List[date], List[datetime]],
         prices: pd.DataFrame,
     ) -> pd.DataFrame:
-        """Calculate FX forward carry adjustments."""
-        # 1. Normalize dates to datetime (MANDATORY)
+        """Calculate FX forward carry adjustments (event-driven at midnight)."""
+        # 1. Normalize dates to datetime
         dates_dt = self._normalize_dates(dates)
-        
         instrument_ids = list(instruments.keys())
 
-        # 2. Filter applicable (USE should_apply)
+        # 2. Filter applicable
         applicable_ids = [
             inst.id for inst in instruments.values()
             if self.should_apply(inst) and inst.id in self.fwd_composition.index
@@ -166,19 +165,11 @@ class FxForwardCarryComponent(Component):
             )
             return pd.DataFrame(0.0, index=dates_dt, columns=instrument_ids)
 
-        # 4. Log processing
         logger.debug(
             f"FxForwardCarryComponent: Processing {len(applicable_ids)}/{len(instruments)} instruments"
         )
 
-        # 5. Calculate shifted year fractions
-        year_fractions_shifted = calculate_year_fractions(
-            dates_dt,
-            shifted=True,
-            settlement_days=self.settlement_days
-        )
-
-        # 6. Calculate rate differentials (forward already transformed in __init__)
+        # 4. Calculate rate differentials (forward already transformed in __init__)
         rate_diffs = self._calculate_rate_differentials(
             self.fx_forward_prices,
             self.fx_spot_prices,
@@ -196,98 +187,216 @@ class FxForwardCarryComponent(Component):
             )
             return pd.DataFrame(0.0, index=dates_dt, columns=instrument_ids)
 
-        # 7. Get composition matrix
-        comp_matrix = self.fwd_composition.loc[applicable_ids]
+        # 5. Detect if intraday mode
+        is_intraday = self._is_intraday_mode(dates_dt)
 
-        # Align currencies
-        common_currencies = comp_matrix.columns.intersection(rate_diffs.columns)
-        if len(common_currencies) == 0:
-            logger.error(
-                f"FxForwardCarryComponent: No currency overlap. "
-                f"Composition: {list(comp_matrix.columns)}, "
-                f"Rate diffs: {list(rate_diffs.columns)}"
-            )
-            return pd.DataFrame(0.0, index=dates_dt, columns=instrument_ids)
-
-        comp_matrix = comp_matrix[common_currencies]
-        rate_diffs_aligned = rate_diffs.loc[common_dates, common_currencies]
-
-        # 8. Matrix multiplication: (N × M) @ (M × T)^T = N × T
-        weighted_rates = comp_matrix @ rate_diffs_aligned.T
-        result_applicable = weighted_rates.T  # dates × instruments
-
-        # 9. Multiply by year fractions
-        year_frac_aligned = year_fractions_shifted.loc[common_dates]
-        result_applicable = result_applicable.mul(year_frac_aligned, axis=0)
-
-        # 10. Subtract trading currency carry
-        for inst_id in applicable_ids:
-            trading_ccy = str(instruments[inst_id].currency)
-
-            if trading_ccy != 'EUR' and trading_ccy in rate_diffs.columns:
-                trading_carry = (
-                    rate_diffs_aligned[trading_ccy] * year_frac_aligned
-                )
-                result_applicable[inst_id] = (
-                    result_applicable[inst_id] - trading_carry
-                )
-        result = pd.DataFrame(0.0, index=dates_dt, columns=instrument_ids, dtype=np.float64)
-
-        # Ensure compatible dtype and assign
-        if not result_applicable.empty:
-            result_applicable = result_applicable.astype(np.float64, copy=False)
-            result.loc[common_dates, applicable_ids] = result_applicable
-
-        # 12. Summary logging
-        non_zero = (result != 0).sum().sum()
-        if non_zero == 0:
-            logger.debug(
-                f"FxForwardCarryComponent: ZERO non-zero adjustments for "
-                f"{len(applicable_ids)} instruments (expected if no rate differentials)"
+        if is_intraday:
+            logger.debug("FxForwardCarryComponent: Using intraday mode (period returns)")
+            result = self._calculate_intraday(
+                instruments, applicable_ids, dates_dt, rate_diffs, common_dates
             )
         else:
-            mean_adj = result[applicable_ids].mean().mean()
+            logger.debug("FxForwardCarryComponent: Using daily mode")
+            result = self._calculate_daily(
+                instruments, applicable_ids, dates_dt, rate_diffs, common_dates
+            )
+
+        # 6. Summary logging
+        non_zero = (result != 0).sum().sum()
+        if non_zero == 0:
+            logger.debug(f"FxForwardCarryComponent: ZERO non-zero adjustments for {len(applicable_ids)} instruments")
+        else:
+            mean_adj = result[result != 0].mean().mean()
             logger.debug(
                 f"FxForwardCarryComponent: Generated {non_zero} non-zero adjustments, "
                 f"mean carry impact: {mean_adj:.6f}"
             )
 
-        return - result
+        return result
 
-    # ========================================================================
+
+    def _calculate_daily(
+        self,
+        instruments: dict[str, InstrumentProtocol],
+        applicable_ids: List[str],
+        dates_dt: List[datetime],
+        rate_diffs: pd.DataFrame,
+        common_dates: pd.Index,
+    ) -> pd.DataFrame:
+        """Calculate FX forward carry adjustments for daily data."""
+        instrument_ids = list(instruments.keys())
+        result = pd.DataFrame(0.0, index=dates_dt, columns=instrument_ids, dtype=np.float64)
+
+        # Calculate shifted year fractions for all dates
+        year_fractions_shifted = calculate_year_fractions(
+            dates_dt, shifted=True, settlement_days=self.settlement_days
+        )
+
+        # Get composition matrix
+        comp_matrix = self.fwd_composition.loc[applicable_ids]
+
+        # Align currencies
+        common_currencies = comp_matrix.columns.intersection(rate_diffs.columns)
+        if len(common_currencies) == 0:
+            logger.error("FxForwardCarryComponent: No currency overlap.")
+            return result
+
+        comp_matrix = comp_matrix[common_currencies]
+        rate_diffs_aligned = rate_diffs.loc[common_dates, common_currencies]
+
+        # Vectorized calculation: (N × M) @ (M × T)^T = N × T
+        weighted_rates = comp_matrix @ rate_diffs_aligned.T
+        result_applicable = weighted_rates.T  # dates × instruments
+
+        # Multiply by year fractions
+        year_frac_aligned = year_fractions_shifted.loc[common_dates]
+        result_applicable = result_applicable.mul(year_frac_aligned, axis=0)
+
+        # Subtract trading currency carry
+        for inst_id in applicable_ids:
+            trading_ccy = str(instruments[inst_id].currency)
+            if trading_ccy != 'EUR' and trading_ccy in rate_diffs.columns:
+                trading_carry = rate_diffs_aligned[trading_ccy] * year_frac_aligned
+                result_applicable[inst_id] = result_applicable[inst_id] - trading_carry
+
+        # Assign results
+        if not result_applicable.empty:
+            result_applicable = result_applicable.astype(np.float64, copy=False)
+            result.loc[common_dates, applicable_ids] = result_applicable
+
+        return -result  # Negative for cost
+
+    def _calculate_intraday(
+        self,
+        instruments: dict[str, InstrumentProtocol],
+        applicable_ids: List[str],
+        dates_dt: List[datetime],
+        rate_diffs: pd.DataFrame,
+        common_dates: pd.Index,
+    ) -> pd.DataFrame:
+        """Calculate FX forward carry adjustments for intraday data (period returns).
+
+        For each unique date, FX carry is applied at midnight to the period crossing that boundary.
+        The adjustment value is weighted_rate × year_fraction_for_that_date.
+        """
+        instrument_ids = list(instruments.keys())
+        result = pd.DataFrame(0.0, index=dates_dt, columns=instrument_ids, dtype=np.float64)
+
+        # Extract unique dates and calculate year fractions for them
+        unique_dates = pd.Index(dates_dt).normalize().unique()
+        year_fractions = calculate_year_fractions(
+            unique_dates, shifted=True, settlement_days=self.settlement_days
+        )
+
+        # Map unique_dates to their year_fractions
+        yf_dict = dict(zip(unique_dates, year_fractions))
+
+        # Get composition matrix
+        comp_matrix = self.fwd_composition.loc[applicable_ids]
+
+        # Align currencies
+        common_currencies = comp_matrix.columns.intersection(rate_diffs.columns)
+        if len(common_currencies) == 0:
+            logger.error("FxForwardCarryComponent: No currency overlap.")
+            return result
+
+        comp_matrix = comp_matrix[common_currencies]
+        rate_diffs_common = rate_diffs[common_currencies]
+
+        # For each unique date, apply FX carry to the period crossing midnight
+        for ter_date in unique_dates:
+            ter_timestamp = pd.Timestamp(ter_date)
+            yf = yf_dict[ter_date]
+
+            # Preserve timezone if dates are tz-aware
+            if hasattr(dates_dt, 'tz') and dates_dt.tz is not None:
+                if ter_timestamp.tz is None:
+                    ter_timestamp = ter_timestamp.tz_localize(dates_dt.tz)
+                else:
+                    ter_timestamp = ter_timestamp.tz_convert(dates_dt.tz)
+
+            # Find the period that crosses this midnight
+            for i in range(1, len(dates_dt)):
+                t1 = dates_dt[i - 1]
+                t2 = dates_dt[i]
+
+                t1_ts = pd.Timestamp(t1)
+                t2_ts = pd.Timestamp(t2)
+
+                # FX carry applies if period crosses the date boundary
+                if t1_ts < ter_timestamp <= t2_ts:
+                    # Get rate differentials for this date
+                    if ter_date in rate_diffs_common.index:
+                        rate_diffs_date = rate_diffs_common.loc[ter_date]
+
+                        # Calculate weighted rates
+                        weighted_rate = comp_matrix @ rate_diffs_date
+
+                        # Subtract trading currency carry
+                        for inst_id in applicable_ids:
+                            trading_ccy = str(instruments[inst_id].currency)
+                            if trading_ccy != 'EUR' and trading_ccy in rate_diffs_date.index:
+                                trading_carry = rate_diffs_date[trading_ccy]
+                                weighted_rate[inst_id] = weighted_rate[inst_id] - trading_carry
+
+                        # Apply year fraction and negate
+                        adjustment = -weighted_rate * yf
+
+                        # Assign to result
+                        result.loc[t2, applicable_ids] = adjustment[applicable_ids]
+
+                        logger.debug(
+                            f"FxForwardCarryComponent: Applied FX carry at {t2} "
+                            f"(period {t1} -> {t2}, yf={yf:.6f})"
+                        )
+
+                    break
+
+        return result
+
+    @staticmethod
+    def _is_intraday_mode(dates_dt: List[datetime]) -> bool:
+        """Detect if operating in intraday mode (non-midnight timestamps)."""
+        if not dates_dt:
+            return False
+
+        return any(d.hour != 0 or d.minute != 0 for d in dates_dt)
+
+
+        # ========================================================================
     # UTILITY METHODS - Parsing, validation, normalization
     # ========================================================================
 
     def _transform_fx_forward_prices(
-        self, 
-        fx_fwd_prices: pd.DataFrame, 
+        self,
+        fx_fwd_prices: pd.DataFrame,
         tenor: str
     ) -> pd.DataFrame:
         """
         Transform FX forward prices from basis points to annualized rates.
-        
+
         Transformation:
             1. Annualize based on tenor (1M -> × 12, 3M -> × 4, etc.)
             2. Convert from basis points to decimal (÷ 10,000)
-        
+
         Formula:
             annualized_rate = (monthly_bp × months_per_year) / 10,000
-        
+
         Example:
             Input: 25 bp (1M tenor)
             Step 1: 25 × 12 = 300 bp (annualized)
             Step 2: 300 / 10,000 = 0.03 (3% annualized rate)
-        
+
         Args:
             fx_fwd_prices: DataFrame with forward prices in bp (dates × currencies)
             tenor: Tenor string ('1M', '3M', '6M', '1Y')
-        
+
         Returns:
             DataFrame with annualized rates in decimal format
         """
         # Parse tenor to get months
         tenor_upper = tenor.upper().strip()
-        
+
         if tenor_upper not in self.TENOR_MONTHS:
             logger.warning(
                 f"FxForwardCarryComponent: Unknown tenor '{tenor}'. "
@@ -297,63 +406,63 @@ class FxForwardCarryComponent(Component):
             months = 1
         else:
             months = self.TENOR_MONTHS[tenor_upper]
-        
+
         # Calculate annualization factor
         annualization_factor = 12 / months
-        
+
         logger.info(
             f"FxForwardCarryComponent: Transforming forward prices - "
             f"tenor={tenor} ({months} months), "
             f"annualization factor={annualization_factor:.2f}x"
         )
-        
+
         # Step 1: Annualize (multiply by 12/months)
         fx_fwd_annualized = fx_fwd_prices * annualization_factor
-        
+
         # Step 2: Convert from basis points to decimal (divide by 10,000)
         fx_fwd_decimal = fx_fwd_annualized / 10000.0
-        
+
         # Validation
         all_values = pd.to_numeric(fx_fwd_decimal.values.flatten(), errors='coerce')
         all_values = all_values[~np.isnan(all_values) & (all_values != 0)]
-        
+
         if len(all_values) > 0:
             median_val = np.median(np.abs(all_values))
             min_val = np.min(np.abs(all_values))
             max_val = np.max(np.abs(all_values))
-            
+
             logger.info(
                 f"FxForwardCarryComponent: After transformation - "
                 f"min={min_val:.6f}, median={median_val:.6f}, max={max_val:.6f} "
                 f"(expected range: 0.0 to ~0.08)"
             )
-            
+
             # Sanity checks
             if max_val > 0.15:
                 logger.warning(
                     f"FxForwardCarryComponent: Max rate {max_val:.4f} (>{15}%) seems high. "
                     "Check if input is in correct format (basis points)."
                 )
-            
+
             if median_val > 0.10:
                 logger.warning(
                     f"FxForwardCarryComponent: Median rate {median_val:.4f} (>{10}%) seems high. "
                     "Typical range is 0-8%."
                 )
-            
+
             if max_val < 0.001:
                 logger.warning(
                     f"FxForwardCarryComponent: Max rate {max_val:.6f} (<0.1%) seems too low. "
                     "Check if input scaling is correct."
                 )
-        
+
         return fx_fwd_decimal
 
     @staticmethod
     def _normalize_fx_columns(fx_prices: pd.DataFrame, label: str = "prices") -> pd.DataFrame:
         """
         Normalize FX columns to currency codes.
-        
+
         Robust parsing handles:
             'USD'           -> 'USD' (already normalized)
             'EURUSD'        -> 'USD' (extract quote currency)
@@ -363,11 +472,11 @@ class FxForwardCarryComponent(Component):
             'EUREUR'        -> 'EUR' (EUR itself, keep as-is)
             'USDEUR'        -> 'USD' (inverted, needs 1/price)
             'USDEUR 1M'     -> 'USD' (inverted with tenor)
-        
+
         Args:
             fx_prices: DataFrame with FX prices
             label: Label for logging (e.g., "forward", "spot")
-        
+
         Returns:
             DataFrame with normalized column names
         """
@@ -376,16 +485,16 @@ class FxForwardCarryComponent(Component):
 
         if isinstance(fx_prices, pd.Series):
             fx_prices = fx_prices.to_frame()
-        
+
         for col in fx_prices.columns:
             col_str = str(col).upper().strip()
-            
+
             # Parse column: extract base ticker and tenor
             # Pattern: split on space or underscore to separate tenor
             parts = re.split(r'[\s_]+', col_str)
             base_ticker = parts[0]
             tenor = parts[1] if len(parts) > 1 else None
-            
+
             # Case 1: Already a 3-char currency code (USD, GBP, EUR, etc.)
             if len(base_ticker) == 3:
                 normalized_columns[col] = base_ticker
@@ -395,12 +504,12 @@ class FxForwardCarryComponent(Component):
                         f"(tenor: {tenor})"
                     )
                 continue
-            
+
             # Case 2: 6-char EUR-based pair (EURUSD, EURGBP, EUREUR, etc.)
             if len(base_ticker) == 6 and base_ticker.startswith('EUR'):
                 currency = base_ticker[-3:]  # Last 3 chars = quote currency
                 normalized_columns[col] = currency
-                
+
                 if tenor:
                     logger.debug(
                         f"FxForwardCarryComponent ({label}): '{col}' -> '{currency}' "
@@ -411,7 +520,7 @@ class FxForwardCarryComponent(Component):
                         f"FxForwardCarryComponent ({label}): '{col}' -> '{currency}'"
                     )
                 continue
-            
+
             # Case 3: 6-char inverted pair (USDEUR, GBPEUR, etc.)
             if len(base_ticker) == 6 and base_ticker.endswith('EUR'):
                 currency = base_ticker[:3]  # First 3 chars = base currency
@@ -423,17 +532,17 @@ class FxForwardCarryComponent(Component):
                     f"{f' (tenor: {tenor})' if tenor else ''}"
                 )
                 continue
-            
+
             # Case 4: Other format - keep as-is with warning
             logger.warning(
                 f"FxForwardCarryComponent ({label}): '{col}' doesn't match expected format. "
                 f"Expected: 'USD', 'EURUSD', 'EURUSD 1M', etc. Keeping as-is."
             )
             normalized_columns[col] = col
-        
+
         # Create normalized DataFrame
         fx_normalized = fx_prices.copy()
-        
+
         # Invert prices for inverted tickers
         for col in columns_to_invert:
             logger.info(
@@ -442,10 +551,10 @@ class FxForwardCarryComponent(Component):
             )
             fx_normalized[col] = 1.0 / fx_normalized[col]
             fx_normalized[col].replace([np.inf, -np.inf], np.nan, inplace=True)
-        
+
         # Rename columns
         fx_normalized = fx_normalized.rename(columns=normalized_columns)
-        
+
         # Check for duplicates
         duplicates = fx_normalized.columns[fx_normalized.columns.duplicated()].tolist()
         if duplicates:
@@ -454,12 +563,12 @@ class FxForwardCarryComponent(Component):
                 "Keeping first occurrence."
             )
             fx_normalized = fx_normalized.loc[:, ~fx_normalized.columns.duplicated()]
-        
+
         logger.info(
             f"FxForwardCarryComponent ({label}): Normalized columns: "
             f"{list(fx_prices.columns)} -> {list(fx_normalized.columns)}"
         )
-        
+
         return fx_normalized
 
     def _calculate_rate_differentials(
@@ -475,8 +584,8 @@ class FxForwardCarryComponent(Component):
             rate_diff = (fwd - spot) / spot
 
         Args:
-            fx_fwd_prices: Forward prices (dates × currencies) - ALREADY TRANSFORMED
-                          (annualized and in decimal format)
+            fx_fwd_prices: Forward prices (dates × currencies) - TRANSFORMED
+                          (annualized and in decimal format, basis points / 10,000)
             fx_spot_prices: Spot prices (dates × currencies) - EUR base FX prices
             tenor: Tenor string for logging
 
@@ -484,47 +593,59 @@ class FxForwardCarryComponent(Component):
             DataFrame(dates × currencies) with rate differentials
 
         Note:
-            - Forward prices are RATE DIFFERENTIALS in annualized decimal format
+            - Forward prices are forward points in annualized decimal format
             - Spot prices are standard FX prices (EUR base)
-            - Since forwards are already rate diffs, we return them directly
+            - Rate differential is calculated as: (forward - spot) / spot
+            - Forward points are the absolute difference (fwd_price - spot_price)
         """
-        # Forward prices are already rate differentials (annualized)
-        # No need to calculate (fwd - spot) / spot
-        # Just return the forward prices as-is
-        
-        logger.debug(
-            f"FxForwardCarryComponent: Using forward rate differentials for tenor {tenor} "
-            f"(already annualized and in decimal format)"
-        )
-        
-        # Align columns with spot (for validation)
+        # Align dates and currencies
+        common_dates = fx_fwd_prices.index.intersection(fx_spot_prices.index)
         common_currencies = fx_fwd_prices.columns.intersection(fx_spot_prices.columns)
-        
+
+        if len(common_dates) == 0:
+            logger.error(
+                f"FxForwardCarryComponent: No date overlap for tenor {tenor}. "
+                f"Forward dates: {fx_fwd_prices.index.min()} to {fx_fwd_prices.index.max()}, "
+                f"Spot dates: {fx_spot_prices.index.min()} to {fx_spot_prices.index.max()}"
+            )
+            return pd.DataFrame()
+
         if len(common_currencies) == 0:
-            logger.warning(
+            logger.error(
                 f"FxForwardCarryComponent: No currency overlap for tenor {tenor}. "
                 f"Forward: {list(fx_fwd_prices.columns)}, "
                 f"Spot: {list(fx_spot_prices.columns)}"
             )
             return pd.DataFrame()
-        
-        # Use forward prices directly as rate differentials
-        rate_diffs = fx_fwd_prices[common_currencies].copy()
-        
+
+        # Get aligned data
+        fwd_aligned = fx_fwd_prices.loc[common_dates, common_currencies]
+        spot_aligned = fx_spot_prices.loc[common_dates, common_currencies]
+
+        # Calculate rate differential: (fwd - spot) / spot
+        # Note: fwd_aligned contains forward points (already annualized)
+
+        rate_diffs = fwd_aligned / spot_aligned
+
         # Sanity check: warn if rate differentials exceed reasonable bounds
         max_abs_diff = rate_diffs.abs().max().max()
-        if max_abs_diff > self.MAX_REASONABLE_RATE_DIFF:
+        if np.isnan(max_abs_diff) or np.isinf(max_abs_diff):
+            logger.warning(
+                f"FxForwardCarryComponent: Rate differentials contain NaN or Inf. "
+                "Check for invalid spot prices (zero or NaN values)."
+            )
+        elif max_abs_diff > self.MAX_REASONABLE_RATE_DIFF:
             logger.warning(
                 f"FxForwardCarryComponent: Rate differentials for tenor {tenor} "
                 f"exceed {self.MAX_REASONABLE_RATE_DIFF:.1%} (max: {max_abs_diff:.1%}). "
-                "Check if forward prices are in correct format."
+                "Check if forward/spot prices are in correct format."
             )
-        
+
         logger.debug(
-            f"FxForwardCarryComponent: Rate differentials for tenor {tenor}, "
+            f"FxForwardCarryComponent: Calculated rate differentials for tenor {tenor}, "
             f"{len(rate_diffs)} dates, {len(common_currencies)} currencies"
         )
-        
+
         return rate_diffs
 
     # ========================================================================

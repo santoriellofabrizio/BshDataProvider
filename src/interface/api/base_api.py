@@ -22,9 +22,9 @@ class BaseAPI:
     """
 
     def __init__(
-        self,
-        client: Optional[BSHDataClient] = None,
-        autocomplete: bool = False,
+            self,
+            client: Optional[BSHDataClient] = None,
+            autocomplete: bool = False,
     ):
         self.client = client
         self.autocomplete = autocomplete
@@ -155,7 +155,6 @@ class BaseAPI:
             if i_id and ISIN_RE.match(i_id):
                 isins[i] = i_isin or i_id
 
-
         return ids, isins, tickers
 
     # ============================================================
@@ -171,6 +170,51 @@ class BaseAPI:
 
     def _dispatch(self, *args, **kwargs):
         pass
+
+    # ============================================================
+    # 🔹 Normalizzazione indice datetime
+    # ============================================================
+
+    def _ensure_datetime_index(self, obj):
+        """
+        Forza DatetimeIndex con dtype='datetime64[ns]' per DataFrame/Series.
+        Usato dopo _aggregate() per garantire indici normalizzati.
+
+        Risolve problemi dove provider ritorna indici object dtype invece di DatetimeIndex.
+        """
+        import pandas as pd
+        import numpy as np
+
+        def fix_index(idx):
+            """Converte index a DatetimeIndex con dtype corretto."""
+            if isinstance(idx, pd.DatetimeIndex) and idx.dtype == 'datetime64[ns]':
+                return idx  # Already correct
+
+            try:
+                # Aggresivo: converte a datetime64, poi ricrea DatetimeIndex
+                idx_dt = pd.to_datetime(idx, utc=False)
+
+                # Se è una Series, estraiamo i valori
+                if isinstance(idx_dt, pd.Series):
+                    idx_dt = idx_dt.values
+
+                # Ricrea DatetimeIndex
+                return pd.DatetimeIndex(idx_dt)
+            except Exception as e:
+                self.log_request(f"[_ensure_datetime_index] Conversion failed: {e}, keeping original")
+                return idx
+
+        if isinstance(obj, pd.DataFrame):
+            obj.index = fix_index(obj.index)
+            obj.index.name = obj.index.name or 'date'
+            return obj.sort_index()
+
+        elif isinstance(obj, pd.Series):
+            obj.index = fix_index(obj.index)
+            obj.index.name = obj.index.name or 'date'
+            return obj.sort_index()
+
+        return obj
 
     # ============================================================
     # 🔹 Aggregatore base (override nei figli)
@@ -239,6 +283,7 @@ class BaseAPI:
             Standard BshDataProvider:
             - datetime.date -> DatetimeIndex (display: '2025-12-05')
             - datetime/Timestamp -> DatetimeIndex con time
+            - str ISO format -> DatetimeIndex
             """
             if len(s.index) == 0:
                 return s
@@ -252,9 +297,16 @@ class BaseAPI:
 
             # datetime/Timestamp -> assicura DatetimeIndex
             if isinstance(first_key, (datetime, pd.Timestamp)):
-                if not isinstance(s.index, pd.DatetimeIndex):
-                    s.index = pd.to_datetime(s.index)
+                s.index = pd.to_datetime(s.index)
                 return s
+
+            # String ISO format (es: "2026-01-02 09:00:00") -> DatetimeIndex
+            if isinstance(first_key, str):
+                try:
+                    s.index = pd.to_datetime(s.index)
+                    return s
+                except Exception:
+                    pass
 
             # Altri tipi date-like (np.datetime64, ecc)
             if is_date_key(first_key):

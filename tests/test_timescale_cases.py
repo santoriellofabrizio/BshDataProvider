@@ -25,7 +25,8 @@ def test_timescale_intraday_best_sampled(api, sample_isins):
     """Single intraday ETF request (1m best sampled)."""
     res = api.market.get_intraday_etf(
         isin=sample_isins[0],
-        date="2025-12-01",
+        start="2025-12-01",
+        end="2025-12-01",
         frequency="1m",
         fields="mid",
         market="EURONEXT",
@@ -39,7 +40,8 @@ def test_timescale_multi_intraday_best_sampled(api, sample_isins):
     """Single intraday ETF request (1m best sampled)."""
     res = api.market.get_intraday_etf(
         isin=sample_isins[:10],
-        date="2025-10-01",
+        start="2025-12-01",
+        end="2025-12-01",
         frequency="1m",
         fields="mid",
         market="EURONEXT",
@@ -86,7 +88,8 @@ def test_timescale_batch_intraday(api, sample_isins):
     """Batch (multi-instrument) intraday ETF data."""
     res = api.market.get_intraday_etf(
         isin=sample_isins,
-        date=dt.datetime(2025, 9, 25),
+        start="2025-12-01",
+        end="2025-12-01",
         fields="mid",
         market="EURONEXT",
         frequency="1m",

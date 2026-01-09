@@ -15,6 +15,8 @@ from providers.lazy_provider_proxy import LazyProviderProxy
 from providers.oracle.provider import OracleProvider
 from providers.timescale.provider import TimescaleProvider
 
+logger = logging.getLogger(__name__)
+
 
 class BSHDataClient(Singleton):
     """Client unificato per recupero dati da multiple sorgenti."""
@@ -27,14 +29,14 @@ class BSHDataClient(Singleton):
             config_manager: ConfigManager instance (preferred, uses cached config)
             config_path: Path to config file (backward compatibility, creates ConfigManager)
         """
-        
+
         # Support both ConfigManager (new) and config_path (backward compatibility)
         if config_manager is None:
             # Backward compatibility: create ConfigManager from path
             config_manager = ConfigManager.load(config_path)
-        
+
         self._config_manager = config_manager
-        
+
         # Get client config
         client_config = config_manager.get_client_config()
 
@@ -112,7 +114,7 @@ class BSHDataClient(Singleton):
                 elif hasattr(batch_result, "instrument"):
                     results[batch_result.instrument.id] = batch_result
             except Exception as e:
-                logging.exception(f"Error from {provider.__class__.__name__}: {e}")
+                logger.exception(f"Error from {provider.__class__.__name__}: {e}")
                 for req in batch:
                     self._tracker.mark_failed(req.request_id, error=e)
 
@@ -159,5 +161,3 @@ class BSHDataClient(Singleton):
         if not provider:
             raise ValueError(f"Provider '{source}' non disponibile")
         return provider
-
-

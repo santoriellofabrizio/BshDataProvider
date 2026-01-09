@@ -289,6 +289,11 @@ class MarketDataAPI(BaseAPI):
         market = normalize_param(market, init_instruments, default=None)
         type_ = normalize_param(type, init_instruments, default=None)
 
+        start = self._parse_datetime(start) if isinstance(start, (datetime, str)) else\
+            datetime.combine(self._parse_date(start), datetime.min.time())
+        end = self._parse_datetime(end) if isinstance(end, (datetime, str)) else\
+            datetime.combine(self._parse_date(end), datetime.max.time())
+
         # Separate instrument-building params from request params
         instrument_build_params = {
             k: v for k, v in extra_params.items()
@@ -371,7 +376,7 @@ class MarketDataAPI(BaseAPI):
             **extra_params,
         )
         result = self._dispatch(**dispatch_params, fallbacks=fallbacks)
-        return self._aggregate(result).sort_index()
+        return self._as_datetime_index(self._aggregate(result).sort_index())
 
     def get_fx_forward_prices(self,
                               quoted_currency: list[str] | str,
@@ -408,15 +413,14 @@ class MarketDataAPI(BaseAPI):
 
     def get_intraday(
             self,
-            date: Union[dt.date, str],
+            start: Union[dt.date, datetime, str],
+            end: Union[dt.date, datetime, str] = today(),
             id: Optional[Union[str, List[str]]] = None,
             isin: Optional[Union[str, List[str]]] = None,
             ticker: Optional[Union[str, List[str]]] = None,
             type: str = "ETP",
             frequency: str = "1m",
             fields: Union[str, List[str]] = "MID",
-            start_time: Union[time, str] = "09:00:00",
-            end_time: Union[time, str] = "17:00:00",
             source: Optional[Union[str, List[str], Dict[str, str]]] = None,
             market: Optional[Union[str, List[str], Dict[str, str]]] = None,
             subscription: Optional[Union[str, List[str], Dict[str, str]]] = None,
@@ -426,39 +430,38 @@ class MarketDataAPI(BaseAPI):
         Generic intraday data wrapper for any instrument (tick/bar level).
 
         Args:
-            frequency:
-            date (date | str): Snapshot date.
+            start (date | datetime | str): Start date/time. If date, uses 00:00:00. If datetime, uses full timestamp.
+            end (date | datetime | str): End date/time. If date, uses 23:59:59. If datetime, uses full timestamp.
             id: Optional[Union[str, List[str]]], optional): Instrument identifier.
             isin: Optional[Union[str, List[str]]], optional): Instrument isin.
             ticker: Optional[Union[str, List[str]]], optional): Instrument ticker.
             type (str): Instrument type ('ETP', 'FUTURE', etc.).
+            frequency (str): Data frequency (e.g., '1m', '5m', '15m', '1h').
             fields (str | list[str]): Requested data fields.
             source (str | list[str] | dict[str, str]): Data source(s).
             market (str | list[str] | dict[str, str], optional): Market name(s).
-            start_time (str | time): Snapshot start time (format as HH:MM:SS or time).
-            end_time (str | time): Snapshot start time (format as HH:MM:SS or time).
             subscription (str | list[str] | dict[str, str], optional): Subscription identifier(s).
 
         Returns:
-            pd.Series | pd.DataFrame: Snapshot data for the specified date.
+            pd.Series | pd.DataFrame: Time-series data for the specified period.
         """
-        date = self._parse_date(date)
-        start_time = self._parse_time(start_time)
-        end_time = self._parse_time(end_time)
+        # Parse start and end (handles date/datetime/str)
+        start_parsed = self._parse_datetime(start) if isinstance(start, (datetime, str)) else\
+            datetime.combine(self._parse_date(start), datetime.min.time())
+        end_parsed = self._parse_datetime(end) if isinstance(end, (datetime, str)) else\
+            datetime.combine(self._parse_date(end), datetime.max.time())
 
-        if not all(isinstance(t, time) for t in (start_time, end_time)):
-            raise ValueError("start_time e end_time devono essere in formato HH:MM:SS")
-
-        start = f"{date}T{start_time.strftime('%H:%M:%S')}"
-        end = f"{date}T{end_time.strftime('%H:%M:%S')}"
+        # Convert to ISO format strings for the request
+        start_str = start_parsed.isoformat()
+        end_str = end_parsed.isoformat()
 
         return self.get(
             type=type,
             id=id,
             isin=isin,
             ticker=ticker,
-            start=start,
-            end=end,
+            start=start_str,
+            end=end_str,
             frequency=frequency,
             fields=fields,
             source=source,
@@ -526,29 +529,27 @@ class MarketDataAPI(BaseAPI):
 
     def get_intraday_etf(
             self,
-            date: Union[dt.date, str],
+            start: Union[dt.date, datetime, str],
+            end: Optional[Union[dt.date, datetime, str]] = None,
             id: Optional[Union[str, List[str]]] = None,
             isin: Optional[Union[str, List[str]]] = None,
             ticker: Optional[Union[str, List[str]]] = None,
             frequency: str = "15m",
             fields: Union[str, List[str]] = "MID",
-            start_time: Union[time, str] = "09:00:00",
-            end_time: Union[time, str] = "17:00:00",
             source: Union[str, List[str], Dict[str, str]] = "timescale",
             market: Union[str, List[str], Dict[str, str]] = "ETFP",
             **extra_params,
     ):
         """Dati intraday per ETF (ETP su ETFP di default). wraps get_intraday."""
         return self.get_intraday(
-            date=date,
+            start=start,
+            end=end,
             id=id,
             isin=isin,
             ticker=ticker,
             type="ETP",
             frequency=frequency,
             fields=fields,
-            start_time=start_time,
-            end_time=end_time,
             source=source,
             market=market,
             **extra_params,
@@ -556,14 +557,13 @@ class MarketDataAPI(BaseAPI):
 
     def get_intraday_future(
             self,
-            date: Union[dt.date, str],
+            start: Union[dt.date, datetime, str],
+            end: Union[dt.date, datetime, str],
             id: Optional[Union[str, List[str]]] = None,
             isin: Optional[Union[str, List[str]]] = None,
             ticker: Optional[Union[str, List[str]]] = None,
             frequency: str = "1m",
             fields: Union[str, List[str]] = "MID",
-            start_time: Union[time, str] = "09:00:00",
-            end_time: Union[time, str] = "17:00:00",
             source: str = "timescale",
             market: Optional[str] = None,
             **extra_params,
@@ -573,15 +573,14 @@ class MarketDataAPI(BaseAPI):
             market = "EUREX"
 
         return self.get_intraday(
-            date=date,
+            start=start,
+            end=end,
             id=id,
             isin=isin,
             ticker=ticker,
             type="FUTURE",
             frequency=frequency,
             fields=fields,
-            start_time=start_time,
-            end_time=end_time,
             source=source,
             market=market,
             **extra_params,
@@ -589,28 +588,26 @@ class MarketDataAPI(BaseAPI):
 
     def get_intraday_fx(
             self,
-            date: Union[dt.date, str],
+            start: Union[dt.date, datetime, str],
+            end: Union[dt.date, datetime, str],
             id: Optional[Union[str, List[str]]] = None,
             isin: Optional[Union[str, List[str]]] = None,
             ticker: Optional[Union[str, List[str]]] = None,
             frequency: str = "1m",
             fields: Union[str, List[str]] = "MID",
-            start_time: Union[time, str] = "00:00:00",
-            end_time: Union[time, str] = "23:59:59",
             source: str = "timescale",
             **extra_params,
     ):
         """Dati intraday per coppie FX. wraps get_intraday."""
         return self.get_intraday(
-            date=date,
+            start=start,
+            end=end,
             id=id,
             isin=isin,
             ticker=ticker,
             type="CURRENCYPAIR",
             frequency=frequency,
             fields=fields,
-            start_time=start_time,
-            end_time=end_time,
             source=source,
             **extra_params,
         )
@@ -817,51 +814,47 @@ class MarketDataAPI(BaseAPI):
 
     def get_intraday_swap(
             self,
-            date: Union[dt.date, str],
+            start: Union[dt.date, datetime, str],
+            end: Union[dt.date, datetime, str],
             id: Optional[Union[str, List[str]]] = None,
             ticker: Optional[Union[str, List[str]]] = None,
             frequency: str = "1m",
             fields: Union[str, List[str]] = "MID",
-            start_time: Union[time, str] = "09:00:00",
-            end_time: Union[time, str] = "23:59:59",
             source: str = "oracle",
             **extra_params,
     ):
-        """daily market data swap, refer to Oracle anagraphic for ticker choice. (es: EUZCISWAP10,..)"""
+        """Dati intraday swap. Refer to Oracle anagraphic for ticker choice (e.g., EUZCISWAP10)."""
         return self.get_intraday(
-            date=date,
+            start=start,
+            end=end,
             id=id,
             ticker=ticker,
             type="SWAP",
             frequency=frequency,
             fields=fields,
-            start_time=start_time,
-            end_time=end_time,
             source=source,
             **extra_params)
 
     def get_intraday_cdx(
             self,
-            date: Union[dt.date, str],
+            start: Union[dt.date, datetime, str],
+            end: Union[dt.date, datetime, str],
             id: Optional[Union[str, List[str]]] = None,
             ticker: Optional[Union[str, List[str]]] = None,
             frequency: str = "1m",
             fields: Union[str, List[str]] = "MID",
-            start_time: Union[time, str] = "09:00:00",
-            end_time: Union[time, str] = "23:59:59",
             source: str = "oracle",
             **extra_params,
     ):
-        """intraday market data cdx, refer to Oracle anagraphic for ticker choice."""
+        """Dati intraday CDX. Refer to Oracle anagraphic for ticker choice."""
         return self.get_intraday(
-            date=date,
+            start=start,
+            end=end,
             id=id,
             ticker=ticker,
             type=InstrumentType.CDXINDEX,
             frequency=frequency,
             fields=fields,
-            start_time=start_time,
-            end_time=end_time,
             source=source,
             **extra_params)
 
@@ -965,3 +958,11 @@ class MarketDataAPI(BaseAPI):
                         request_type="historical",
                         tenor=tenor,
                         **extra_params)
+
+    def _as_datetime_index(self, df: pd.DataFrame) -> pd.DataFrame:
+        try:
+            df.index = pd.to_datetime(df.index)
+        except Exception:
+            pass
+        finally:
+            return df

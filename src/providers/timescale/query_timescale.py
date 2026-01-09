@@ -1,5 +1,5 @@
 import datetime as dt
-from typing import List, Optional, Union
+from typing import List, Optional, Union, Tuple
 import numpy as np
 import pandas as pd
 
@@ -189,7 +189,7 @@ class QueryTimeScale:
         self,
         date: dt.date,
         market: str,
-        array_isin: List[str],
+        array_isin: Tuple[str],
         currency: str,
         fairvalue_time: dt.time,
         max_spread_percent: float = 1.,
@@ -236,6 +236,7 @@ class QueryTimeScale:
                 AND b.datetime <= '{datetime_to}'
         """
         return self._get_results(query, market=market, date_=date)
+
     @cache_bsh_data
     def best_sampled_isin(
         self,
@@ -277,12 +278,13 @@ class QueryTimeScale:
             self,
             date: dt.date,
             market: str,
-            isin: Union[str, List[str]],
+            isin: Union[str, Tuple[str, ...]],  # Usa Tuple invece di List
             seconds_sampling: int,
             currency: str = 'EUR',
             segment: Optional[str] = None
     ):
-        isins = [isin] if isinstance(isin, str) else isin
+        # Converti tuple in lista per l'elaborazione
+        isins = [isin] if isinstance(isin, str) else list(isin)
         isin_list = ','.join(f"'{i}'" for i in isins)
         isin_filter = f"a.isin IN ({isin_list})"
         date_start = date.strftime("%Y-%m-%d")

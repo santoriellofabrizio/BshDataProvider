@@ -157,11 +157,7 @@ class YtmComponent(Component):
         )
 
         # 5. Calculate shifted year fractions once (T+2 settlement)
-        year_fractions_shifted = calculate_year_fractions(
-            dates_dt,
-            shifted=True,
-            settlement_days=self.settlement_days
-        )
+        year_fractions_shifted = calculate_year_fractions(dates_dt, shifted=True, settlement_days=self.settlement_days)
 
         # 6. Get YTM data for applicable instruments
         ytm_applicable = self.ytm_series[applicable_ids]

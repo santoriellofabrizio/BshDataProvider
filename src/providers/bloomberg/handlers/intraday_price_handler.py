@@ -121,6 +121,7 @@ class BloombergIntradayPriceHandler(IntradayPriceHandler, BaseFetcher):
             end: datetime
     ):
         """Create Bloomberg IntradayBarRequest."""
+        end = end + timedelta(days=1) #ensure last day is included
         req = service.createRequest("IntradayBarRequest")
         req.set("security", security)
         req.set("eventType", event_type.upper())

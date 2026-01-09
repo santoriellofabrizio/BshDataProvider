@@ -126,11 +126,7 @@ class CdxComponent(Component):
         )
 
         # 5. Calculate shifted year fractions
-        year_fractions_shifted = calculate_year_fractions(
-            dates_dt,
-            shifted=True,
-            settlement_days=self.settlement_days
-        )
+        year_fractions_shifted = calculate_year_fractions(dates_dt, shifted=True, settlement_days=self.settlement_days)
 
         # 6. Get CDX spreads for applicable instruments
         cdx_applicable = self.cdx_spreads[applicable_ids]

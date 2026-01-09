@@ -13,17 +13,17 @@ logger = logging.getLogger(__name__)
 
 
 def calculate_year_fractions(
-        dates: list[date] | pd.DatetimeIndex,
+        business_dates: list[date] | pd.DatetimeIndex,
         shifted: bool = False,
         settlement_days: int = 2,
-        number_of_days: int = 365,
+        number_of_days_in_year: int = 365,
 ) -> pd.Series:
     """
     Calculate year fractions for pro-rata calculations.
 
     Args:
-        number_of_days:  number of days in a year
-        dates: List of dates or DatetimeIndex
+        number_of_days_in_year: number of days in a year
+        business_dates: List of dates or DatetimeIndex
         shifted: If True, use shifted fractions (for settlement lag)
         settlement_days: Settlement lag (T+1=1, T+2=2)
 
@@ -43,26 +43,27 @@ def calculate_year_fractions(
         fractions_shifted = calculate_year_fractions(dates, shifted=True, settlement_days=2)
     """
     # Convert to list if DatetimeIndex
-    if isinstance(dates, pd.DatetimeIndex):
-        dates = dates.tolist()
+    if isinstance(business_dates, pd.DatetimeIndex):
+        business_dates = business_dates.tolist()
 
-    if not dates:
+    if not business_dates:
         return pd.Series(dtype=float)
 
-    dates_sorted = sorted(dates)
+    dates_sorted = sorted(business_dates)
     fractions = pd.Series(0.0, index=dates_sorted)
 
     if shifted:
         # Shifted fractions (for forward settlement)
         for i, date in enumerate(dates_sorted):
             if i < len(dates_sorted) - settlement_days:
-                next_date = dates_sorted[i + settlement_days]
-                days = (next_date - date).days
+                next_settlement_date = dates_sorted[i + settlement_days]
+                one_day_before_settlement = dates_sorted[i + settlement_days - 1]
+                days = (next_settlement_date - one_day_before_settlement).days
             else:
                 # Fallback for end dates
                 days = 1
 
-            fractions[date] = days / number_of_days / settlement_days
+            fractions[date] = days / number_of_days_in_year
     else:
         # Standard fractions
         for i, date in enumerate(dates_sorted):
@@ -74,7 +75,7 @@ def calculate_year_fractions(
                 prev_date = dates_sorted[i - 1]
                 days = (date - prev_date).days
 
-            fractions[date] = days / number_of_days / settlement_days
+                fractions[date] = days / number_of_days_in_year
 
     return fractions
 

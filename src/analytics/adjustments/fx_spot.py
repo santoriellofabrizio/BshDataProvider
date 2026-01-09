@@ -148,18 +148,19 @@ class FxSpotComponent(Component):
         """Restore saved state"""
         self._fx_prices = state['fx_prices']
 
-    def apply_temp_data(self, *, fx_prices: Optional[pd.DataFrame | pd.Series] = None, **kwargs) -> None:
+    def apply_temp_data(self, *, timestamp: pd.Timestamp,  fx_prices: Optional[pd.DataFrame | pd.Series] = None, **kwargs) -> None:
         """
         Temporarily extend fx_prices without permanent storage.
 
         Args:
+            timestamp_: timestamp of update
             fx_prices: Temporary FX price data
         """
         if fx_prices is None:
             return
 
         if isinstance(fx_prices, pd.Series):
-            ts = pd.Timestamp.now() if self.is_intraday else pd.Timestamp.now().normalize()
+            ts = timestamp if self.is_intraday else timestamp.normalize()
             fx_prices = fx_prices.to_frame(ts).T
 
         # Validate
@@ -189,15 +190,6 @@ class FxSpotComponent(Component):
 
         if instrument.id not in self.fx_composition.index:
             return False
-
-        # Check currency_hedged attribute
-        if hasattr(instrument, 'currency_hedged'):
-            is_hedged = instrument.currency_hedged
-            if is_hedged is None:
-                is_hedged = False
-
-            if is_hedged:
-                return False
 
         return True
 

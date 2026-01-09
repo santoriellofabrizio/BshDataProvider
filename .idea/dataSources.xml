@@ -9,5 +9,12 @@
       <jdbc-url>jdbc:oracle:thin:@//dcdwboh-cli.sg.gbs.pro:1521/OTH_ORABOH.bsella.it</jdbc-url>
       <working-dir>$ProjectFileDir$</working-dir>
     </data-source>
+    <data-source source="LOCAL" name="EtfEquityDB.db" uuid="843229e0-e9df-42b2-8854-78a29495a527">
+      <driver-ref>sqlite.xerial</driver-ref>
+      <synchronize>true</synchronize>
+      <jdbc-driver>org.sqlite.JDBC</jdbc-driver>
+      <jdbc-url>jdbc:sqlite:V:/EquityETF/EtfEquityDB.db</jdbc-url>
+      <working-dir>$ProjectFileDir$</working-dir>
+    </data-source>
   </component>
 </project>
