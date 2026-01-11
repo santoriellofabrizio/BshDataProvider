@@ -18,7 +18,7 @@ Typical usage:
     >>> pipeline.load()
     >>> 
     >>> # Access results
-    >>> clean_returns = pipeline.clean_returns
+    >>> clean_returns = pipeline.get_clean_returns
     >>> raw_prices = pipeline.etf_prices_intraday
     
     # Con override:
@@ -57,10 +57,10 @@ class PipelineConfig:
     # Snapshot time for daily data
     snapshot_time: time = field(default_factory=lambda: time(17, 0))
 
-    # Frequency: 'daily' or intraday like '1m', '5m', '15m', '1h'
+    # Frequency: 'daily' or is_intraday like '1m', '5m', '15m', '1h'
     frequency: str = "daily"
 
-    # For intraday: time range within day
+    # For is_intraday: time range within day
     intraday_start_time: time = field(default_factory=lambda: time(9, 0))
     intraday_end_time: time = field(default_factory=lambda: time(17, 30))
 
@@ -359,7 +359,7 @@ class EtfDataPipeline:
         logger.info(f"Loaded ETF prices: {self._etf_prices.shape}")
 
     def _load_intraday_prices(self) -> pd.DataFrame:
-        """Load intraday prices for date range."""
+        """Load is_intraday prices for date range."""
         start_date = pd.to_datetime(self.config.start).date()
         end_date = pd.to_datetime(self.config.end).date()
         dates = pd.date_range(start_date, end_date, freq='B')
@@ -379,10 +379,10 @@ class EtfDataPipeline:
                 if day_prices is not None and not day_prices.empty:
                     all_prices.append(day_prices)
             except Exception as e:
-                logger.warning(f"Failed to load intraday for {d.date()}: {e}")
+                logger.warning(f"Failed to load is_intraday for {d.date()}: {e}")
 
         if not all_prices:
-            raise ValueError("No intraday prices loaded")
+            raise ValueError("No is_intraday prices loaded")
 
         return pd.concat(all_prices).sort_index()
 
@@ -518,12 +518,7 @@ class EtfDataPipeline:
 
         intraday = self.config.frequency.lower() not in ["daily", "1d"]
 
-        self._adjuster = Adjuster(
-            prices=self._etf_prices,
-            intraday=intraday,
-            fill_method=self.config.fill_method,
-            return_type=self.config.return_type,
-        )
+        self._adjuster = Adjuster(prices=self._etf_prices, is_intraday=intraday, return_type=self.config.return_type)
 
         # Add TER component
         if self.config.adjust_ter and self._ter:
@@ -618,7 +613,7 @@ class EtfDataPipeline:
     def clean_returns(self) -> pd.DataFrame:
         """Clean returns (adjusted for TER, FX, dividends)."""
         self._ensure_loaded()
-        return self._adjuster.clean_returns()
+        return self._adjuster.get_clean_returns()
 
     @property
     def raw_returns(self) -> pd.DataFrame:
@@ -636,7 +631,7 @@ class EtfDataPipeline:
     def adjustments(self) -> pd.DataFrame:
         """Total adjustments applied."""
         self._ensure_loaded()
-        return self._adjuster.calculate()
+        return self._adjuster.calculate_adjustments()
 
     @property
     def adjustment_breakdown(self) -> dict:

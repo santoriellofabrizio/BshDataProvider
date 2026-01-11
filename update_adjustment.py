@@ -55,7 +55,7 @@ def setup_adjuster(tickers: list[str]) -> tuple[Adjuster, dict, pd.DataFrame]:
     fx_fwd_comp = data.fx_forward_composition.loc[[i for i in isins if i in data.fx_forward_composition.index]]
 
     adjuster = (
-        Adjuster(prices=prices, intraday=False)
+        Adjuster(prices=prices, is_intraday=False)
         .add(TerComponent(ter))
         .add(DividendComponent(divs, fx_prices=fx))
         .add(FxForwardCarryComponent(fx_fwd_comp, fx_fwd, "1M", fx))

@@ -94,12 +94,13 @@ class FxSpotComponent(Component):
 ## Usage Examples
 
 ### Current Usage (Percentage Returns - Default)
+
 ```python
 # No change required - percentage is default
 adjuster = Adjuster(prices)
 adjuster.add(TerComponent(ters))
 adjuster.add(FxSpotComponent(composition, fx_prices))
-clean_returns = adjuster.clean_returns()  # Percentage returns
+clean_returns = adjuster.get_clean_returns()  # Percentage returns
 ```
 
 ### NaN Handling
@@ -110,7 +111,7 @@ adjuster = Adjuster(prices, fill_method='ffill')
 # Backward-fill
 adjuster = Adjuster(prices, fill_method='bfill')
 
-# Time-weighted interpolation for intraday data
+# Time-weighted interpolation for is_intraday data
 adjuster = Adjuster(prices, fill_method='time')
 
 # Linear interpolation
@@ -122,22 +123,24 @@ adjuster = Adjuster(prices, fill_method='spline')
 ```
 
 ### Future Usage (Logarithmic Returns)
+
 ```python
 # Specify return type
 adjuster = Adjuster(prices, return_type="logarithmic")
 adjuster.add(TerComponent(ters))
 adjuster.add(FxSpotComponent(composition, fx_prices))
-clean_returns = adjuster.clean_returns()  # Logarithmic returns
+clean_returns = adjuster.get_clean_returns()  # Logarithmic returns
 
 # Components will automatically adjust their calculations
 # based on the return type
 ```
 
 ### Future Usage (Absolute Returns)
+
 ```python
 adjuster = Adjuster(prices, return_type="absolute")
 adjuster.add(TerComponent(ters))
-clean_returns = adjuster.clean_returns()  # Absolute returns
+clean_returns = adjuster.get_clean_returns()  # Absolute returns
 ```
 
 ## Return Type Formulas

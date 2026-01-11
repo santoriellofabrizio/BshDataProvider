@@ -27,13 +27,8 @@ __all__ = [
     # Core
     'Adjuster',
     'Component',
-    
-    # Protocols
-    'InstrumentProtocol',
-    'EtfInstrumentProtocol',
-    'ComponentProtocol',
+
 ]
 
 from analytics.adjustments.adjuster import Adjuster
 from analytics.adjustments.component import Component
-from analytics.adjustments.protocols import InstrumentProtocol, EtfInstrumentProtocol, ComponentProtocol

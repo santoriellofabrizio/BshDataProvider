@@ -46,13 +46,13 @@ def adjustment(start):
     # ============================================================
     # 5. BUILD ADJUSTER WITH INSTRUMENTS
     # ============================================================
-    adjuster = (Adjuster(prices=prices, fill_method="time")
+    adjuster = (Adjuster(prices=prices)
                 .add(FxSpotComponent(fx_composition,fx_prices=fx))
                 .add(FxForwardCarryComponent(fx_forward_composition, fx_forward_prices, "1M", fx))
                 .add(TerComponent(ter))
                 .add(DividendComponent(dividends, fx_prices=fx)))
 
-    adjustments = adjuster.calculate()
+    adjustments = adjuster.calculate_adjustments()
     breakdown = adjuster.get_breakdown(as_isin("HWDE", tickers_map))
     print(breakdown)
     rebased_clean = adjuster.clean_prices(

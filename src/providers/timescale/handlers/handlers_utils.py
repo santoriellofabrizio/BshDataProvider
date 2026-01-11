@@ -54,12 +54,12 @@ def _normalize_dataframe(df: pd.DataFrame) -> pd.DataFrame:
 
 def _slice_by_date_range(series: pd.Series, start, end) -> pd.Series:
     """
-    Slice a Series by date range, handling both daily and intraday indices.
+    Slice a Series by date range, handling both daily and is_intraday indices.
 
     Works with:
     - Daily index + daily bounds
     - Intraday index + daily bounds
-    - Intraday index + intraday bounds
+    - Intraday index + is_intraday bounds
     - Mixed scenarios
 
     Args:
@@ -82,7 +82,7 @@ def _slice_by_date_range(series: pd.Series, start, end) -> pd.Series:
     end_ts = pd.Timestamp(end) if end is not None else None
 
     # If end is date-only (midnight), extend to end-of-day
-    # This ensures intraday data for that date is included
+    # This ensures is_intraday data for that date is included
     if end_ts is not None and end_ts == end_ts.normalize():
         end_ts = end_ts + pd.Timedelta(days=1) - pd.Timedelta(nanoseconds=1)
 
@@ -122,7 +122,7 @@ def _build_results(
     df = _ensure_columns_are_upper(df)
     results: dict[str, dict[str, dict]] = {}
 
-    # ref_index SOLO per daily (per intraday non serve!)
+    # ref_index SOLO per daily (per is_intraday non serve!)
     ref_index = pd.DatetimeIndex(business_days) if is_daily else None
 
     # Cicla ogni request (instrument)

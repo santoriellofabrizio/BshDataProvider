@@ -166,3 +166,7 @@ def normalize_fx_columns(fx_prices: pd.DataFrame) -> pd.DataFrame:
     )
 
     return fx_normalized
+
+
+def add_time_tag(series: pd.Series, timestamp: pd.Timestamp) -> pd.DataFrame:
+    return series.to_frame(timestamp).T

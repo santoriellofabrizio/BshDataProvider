@@ -2,12 +2,12 @@
 market_data_api.py — Unified API for dynamic market data.
 
 This module defines the :class:`MarketDataAPI`, a high-level interface for querying
-market time-series and intraday data (ETF, futures, FX, equities) from multiple providers
+market time-series and is_intraday data (ETF, futures, FX, equities) from multiple providers
 (e.g., Timescale, Bloomberg). It standardizes the construction, dispatch, and aggregation
 of requests for dynamic data such as prices, NAVs, or fair values.
 
 Responsibilities:
-    - Manage both daily and intraday data requests
+    - Manage both daily and is_intraday data requests
     - Normalize identifiers and query parameters
     - Handle provider dispatch and result aggregation
     - Integrate caching and auto-completion via BaseAPI
@@ -40,7 +40,7 @@ from interface.api.base_api import BaseAPI
 
 class MarketDataAPI(BaseAPI):
     """
-    High-level API for market data retrieval (historical, intraday, and snapshots).
+    High-level API for market data retrieval (historical, is_intraday, and snapshots).
 
     This class provides a unified interface to fetch time-series
     data from multiple sources. It manages request creation, provider dispatch,
@@ -49,7 +49,7 @@ class MarketDataAPI(BaseAPI):
     Responsibilities:
         - Build and send market data requests and instruments (via InstrumentFactory) through the unified data client
         - Normalize and validate parameters (dates, instruments, frequencies)
-        - Support both historical (daily) and intraday data retrieval
+        - Support both historical (daily) and is_intraday data retrieval
         - Provide convenience wrappers for ETF, Futures, and FX instruments
         - Integrate with caching, autocomplete, and BaseAPI utilities
     """
@@ -427,7 +427,7 @@ class MarketDataAPI(BaseAPI):
             **extra_params,
     ):
         """
-        Generic intraday data wrapper for any instrument (tick/bar level).
+        Generic is_intraday data wrapper for any instrument (tick/bar level).
 
         Args:
             start (date | datetime | str): Start date/time. If date, uses 00:00:00. If datetime, uses full timestamp.
@@ -540,7 +540,7 @@ class MarketDataAPI(BaseAPI):
             market: Union[str, List[str], Dict[str, str]] = "ETFP",
             **extra_params,
     ):
-        """Dati intraday per ETF (ETP su ETFP di default). wraps get_intraday."""
+        """Dati is_intraday per ETF (ETP su ETFP di default). wraps get_intraday."""
         return self.get_intraday(
             start=start,
             end=end,
@@ -568,7 +568,7 @@ class MarketDataAPI(BaseAPI):
             market: Optional[str] = None,
             **extra_params,
     ):
-        """Dati intraday per Futures (EUREX se source=timescale e market non specificato). wraps get_intraday."""
+        """Dati is_intraday per Futures (EUREX se source=timescale e market non specificato). wraps get_intraday."""
         if source == "timescale" and market is None:
             market = "EUREX"
 
@@ -598,7 +598,7 @@ class MarketDataAPI(BaseAPI):
             source: str = "timescale",
             **extra_params,
     ):
-        """Dati intraday per coppie FX. wraps get_intraday."""
+        """Dati is_intraday per coppie FX. wraps get_intraday."""
         return self.get_intraday(
             start=start,
             end=end,
@@ -823,7 +823,7 @@ class MarketDataAPI(BaseAPI):
             source: str = "oracle",
             **extra_params,
     ):
-        """Dati intraday swap. Refer to Oracle anagraphic for ticker choice (e.g., EUZCISWAP10)."""
+        """Dati is_intraday swap. Refer to Oracle anagraphic for ticker choice (e.g., EUZCISWAP10)."""
         return self.get_intraday(
             start=start,
             end=end,
@@ -846,7 +846,7 @@ class MarketDataAPI(BaseAPI):
             source: str = "oracle",
             **extra_params,
     ):
-        """Dati intraday CDX. Refer to Oracle anagraphic for ticker choice."""
+        """Dati is_intraday CDX. Refer to Oracle anagraphic for ticker choice."""
         return self.get_intraday(
             start=start,
             end=end,

@@ -1,10 +1,10 @@
 """
-Test the refactored Adjuster with real intraday data from IUSA.MI and IUSE.MI.
+Test the refactored Adjuster with real is_intraday data from IUSA.MI and IUSE.MI.
 
 This test demonstrates:
 1. Initial setup with historical data
 2. Incremental append_update (permanent storage)
-3. Live intraday updates (temporary, no storage)
+3. Live is_intraday updates (temporary, no storage)
 4. Performance comparison between modes
 """
 import sys
@@ -145,7 +145,7 @@ def test_initial_setup():
 
     # Create adjuster
     adjuster = (
-        Adjuster(historical_prices, instruments=instruments, intraday=True)
+        Adjuster(historical_prices, instruments=instruments, is_intraday=True)
         .add(ter_comp)
         .add(fx_spot_comp)
         .add(fx_forward_comp)
@@ -156,7 +156,7 @@ def test_initial_setup():
 
     # Calculate initial adjustments
     print("\n4. Calculating initial adjustments...")
-    adjustments = adjuster.calculate()
+    adjustments = adjuster.calculate_adjustments()
     print(f"   Adjustments shape: {adjustments.shape}")
     print(f"   Cache size: {len(adjuster._adjustments)}")
 
@@ -172,7 +172,7 @@ def test_initial_setup():
 
 
 def test_progressive_intraday_update(adjuster, last_day_prices, last_day_fx, last_day_fx_forward):
-    """Test 2: Progressive intraday updates with real data from last day"""
+    """Test 2: Progressive is_intraday updates with real data from last day"""
     print("\n" + "="*80)
     print("TEST 2: Progressive Intraday Updates (Real Last Day Data)")
     print("="*80)
@@ -251,12 +251,12 @@ def test_progressive_intraday_update(adjuster, last_day_prices, last_day_fx, las
     print(f"   IUSE: {clean_prices_df['IUSE'].iloc[0]:.2f} -> {clean_prices_df['IUSE'].iloc[-1]:.2f} "
           f"({(clean_prices_df['IUSE'].iloc[-1]/clean_prices_df['IUSE'].iloc[0]-1)*100:+.2f}%)")
 
-    print("\n[OK] Progressive intraday updates complete")
+    print("\n[OK] Progressive is_intraday updates complete")
     return adjuster, clean_prices_df
 
 
 def plot_progressive_updates(clean_prices_df, last_day_prices):
-    """Plot the results of progressive intraday updates"""
+    """Plot the results of progressive is_intraday updates"""
     print("\n" + "="*80)
     print("TEST 3: Visualization of Progressive Updates")
     print("="*80)
@@ -299,7 +299,7 @@ def plot_progressive_updates(clean_prices_df, last_day_prices):
 
 
 def test_live_update(adjuster, last_day_prices, last_day_fx, last_day_fx_forward):
-    """Test 4: Live intraday updates (temporary, no storage)"""
+    """Test 4: Live is_intraday updates (temporary, no storage)"""
     print("\n" + "="*80)
     print("TEST 4: Live Intraday Updates (Temporary, No Storage)")
     print("="*80)
@@ -390,9 +390,9 @@ def test_performance_comparison():
 
     ter_comp1 = TerComponent(data['ters'])
     fx_spot_comp1 = FxSpotComponent(data['fx_composition'], small_fx.iloc[:100])
-    adjuster1 = Adjuster(small_prices.iloc[:100], instruments=instruments, intraday=True)
+    adjuster1 = Adjuster(small_prices.iloc[:100], instruments=instruments, is_intraday=True)
     adjuster1.add(ter_comp1).add(fx_spot_comp1)
-    adjuster1.calculate()
+    adjuster1.calculate_adjustments()
 
     start = time.time()
     adjuster1.append_update(
@@ -405,9 +405,9 @@ def test_performance_comparison():
     # Method 2: Incremental (recalc_last_n=1)
     ter_comp2 = TerComponent(data['ters'])
     fx_spot_comp2 = FxSpotComponent(data['fx_composition'], small_fx.iloc[:100])
-    adjuster2 = Adjuster(small_prices.iloc[:100], instruments=instruments, intraday=True)
+    adjuster2 = Adjuster(small_prices.iloc[:100], instruments=instruments, is_intraday=True)
     adjuster2.add(ter_comp2).add(fx_spot_comp2)
-    adjuster2.calculate()
+    adjuster2.calculate_adjustments()
 
     start = time.time()
     adjuster2.append_update(
@@ -420,9 +420,9 @@ def test_performance_comparison():
     # Method 3: Only new dates (recalc_last_n=0)
     ter_comp3 = TerComponent(data['ters'])
     fx_spot_comp3 = FxSpotComponent(data['fx_composition'], small_fx.iloc[:100])
-    adjuster3 = Adjuster(small_prices.iloc[:100], instruments=instruments, intraday=True)
+    adjuster3 = Adjuster(small_prices.iloc[:100], instruments=instruments, is_intraday=True)
     adjuster3.add(ter_comp3).add(fx_spot_comp3)
-    adjuster3.calculate()
+    adjuster3.calculate_adjustments()
 
     start = time.time()
     adjuster3.append_update(
@@ -481,7 +481,7 @@ def test_visualization(adjuster):
 
     # Plot 3: Clean returns distribution
     ax = axes[2]
-    clean_returns = adjuster.clean_returns()
+    clean_returns = adjuster.get_clean_returns()
     clean_returns.plot(kind='hist', bins=50, alpha=0.6, ax=ax)
     ax.set_title('Clean Returns Distribution', fontsize=12, fontweight='bold')
     ax.set_xlabel('Return')
@@ -505,7 +505,7 @@ def test_visualization(adjuster):
     print(clean_returns.describe())
 
     print("\nTotal Adjustments (mean by instrument):")
-    total_adj = adjuster.calculate().mean()
+    total_adj = adjuster.calculate_adjustments().mean()
     print(total_adj)
 
     print("\nAdjustment Breakdown (mean):")
@@ -521,8 +521,8 @@ if __name__ == "__main__":
     print("\n" + "="*80)
     print("REAL DATA ANALYSIS - PROGRESSIVE INTRADAY UPDATES")
     print("="*80)
-    print("\nTesting with real intraday data from IUSA.MI and IUSE.MI")
-    print("Demonstrating progressive intraday updates with real last day data")
+    print("\nTesting with real is_intraday data from IUSA.MI and IUSE.MI")
+    print("Demonstrating progressive is_intraday updates with real last day data")
 
     # Run tests
     adjuster, data, last_day_prices, last_day_fx, last_day_fx_forward = test_initial_setup()
@@ -545,7 +545,7 @@ if __name__ == "__main__":
     print("ALL TESTS COMPLETE!")
     print("="*80)
     print("\nKey Findings:")
-    print("1. Progressive intraday updates work correctly with real data")
+    print("1. Progressive is_intraday updates work correctly with real data")
     print("2. Clean prices calculated incrementally for each new timestamp")
     print("3. Live updates are temporary and don't affect stored data")
     print("4. Visualization shows raw vs clean price evolution during the day")

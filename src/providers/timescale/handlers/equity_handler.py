@@ -102,7 +102,7 @@ class EquityHandler(Handler):
                 df = _normalize_dataframe(df)
 
                 if df is not None and not df.empty:
-                    df["date"] = current_day.date()  # traccia giorno intraday
+                    df["date"] = current_day.date()  # traccia giorno is_intraday
                     rows.append(df)
 
                 pbar.update(1)

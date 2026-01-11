@@ -73,7 +73,7 @@ def parse_interval(interval: Union[str, int, Frequency]) -> int:
 
 def parse_intraday_bars_from_message(msg, ohlc_field: str = "close") -> Dict[datetime, float]:
     """
-    Parse intraday bars from a Bloomberg IntradayBarResponse message.
+    Parse is_intraday bars from a Bloomberg IntradayBarResponse message.
 
     Args:
         msg: Bloomberg message object
@@ -104,7 +104,7 @@ def parse_intraday_bars_from_message(msg, ohlc_field: str = "close") -> Dict[dat
                 bars[bar_time] = bar_value
 
     except Exception as e:
-        logger.warning("Error parsing intraday bars from message: %s", e)
+        logger.warning("Error parsing is_intraday bars from message: %s", e)
 
     return bars
 

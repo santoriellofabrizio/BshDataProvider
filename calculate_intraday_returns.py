@@ -33,7 +33,7 @@ COLORS = ['steelblue', 'darkorange', 'seagreen', 'crimson', 'purple', 'gold', 't
 
 
 class DebugReturnsAnalyzer:
-    """Analyzer per ritorni intraday con adjustment components"""
+    """Analyzer per ritorni is_intraday con adjustment components"""
 
     def __init__(self, tickers: list, frequency: str, number_of_days: int = 3,
                  cumulative: bool = True, live_mode: bool = False,
@@ -115,14 +115,14 @@ class DebugReturnsAnalyzer:
             fallbacks=[{"source": "bloomberg"}]
         )
 
-        # Filter intraday hours if needed
+        # Filter is_intraday hours if needed
         if self.intraday:
             self.etf = self.etf.between_time('10:00', '17:00')
             self.fx = self.fx.between_time('10:00', '17:00')
 
         # Setup adjuster
         self.adj = (
-            Adjuster(prices=self.etf, intraday=self.intraday)
+            Adjuster(prices=self.etf, is_intraday=self.intraday)
             .add(TerComponent(self.api.info.get_ter(ticker=self.tickers)))
             .add(DividendComponent(
                 self.api.info.get_dividends(start=start, ticker=self.tickers),
@@ -244,11 +244,7 @@ class DebugReturnsAnalyzer:
     def update_plots(self, live_etf: pd.Series, live_fx: pd.Series, update_num: int):
         """Aggiorna entrambi i subplot con nuovi dati"""
         # Calculate returns
-        rets_clean = self.adj.clean_returns(
-            live_prices=live_etf,
-            fx_prices=live_fx,
-            cumulative=self.cumulative
-        ) * 1e4
+        rets_clean = self.adj.get_clean_returns() * 1e4
 
         rets_raw = self.adj.get_raw_returns(
             live_prices=live_etf,

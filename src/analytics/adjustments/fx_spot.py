@@ -1,314 +1,171 @@
 """
-FX Spot exposure adjustment component for ETF and Stock.
+FX Spot exposure adjustment component.
 
-Adjusts for currency exposure mismatch between portfolio and trading currency.
+Adjusts returns for currency exposure, accounting for trading currency.
+Formula: fx_correction = I·(fx_return[ccy] × weight[ccy]) - fx_return[trading_ccy]
+
+Updatable Fields: fx_prices
 """
 from datetime import date, datetime
 from typing import Union, List, Optional
 import pandas as pd
 import logging
 
-from analytics.adjustments.common import normalize_fx_columns
+from analytics.adjustments.common import normalize_fx_columns, add_time_tag
 from analytics.adjustments.component import Component
-from analytics.adjustments.protocols import InstrumentProtocol
 from core.enums.instrument_types import InstrumentType
 from core.enums.currencies import CurrencyEnum
-
+from core.instruments.instruments import Instrument
 
 logger = logging.getLogger(__name__)
 
 
 class FxSpotComponent(Component):
-    """
-    FX Spot exposure adjustment component (UpdatableComponent).
 
-    Adjusts returns for currency exposure when portfolio composition differs
-    from trading currency using vectorized matrix operations.
-
-    Formula:
-        fx_correction = I·(fx_return[ccy] × weight[ccy]) - fx_return[trading_ccy]
-
-    Updatable Fields:
-        - fx_prices: FX price data
-
-    Usage:
-        # Initialize
-        fx_comp = FxSpotComponent(fx_composition, fx_prices)
-        intraday_adjuster = Adjuster(prices).add(fx_comp)
-
-        # Append mode: permanently add new data
-        intraday_adjuster.append_update(fx_prices=new_fx_prices)
-
-        # Live mode: temporary calculation without storage
-        intraday_adjuster.live_update(fx_prices=live_fx_prices)
-    """
-
-    # Sanity check bounds for composition sum
-    LOWER_SANITY_CHECK = -0.1  # Allow 10% negative for short positions
-    UPPER_SANITY_CHECK = 1.1   # Allow 10% over for rounding/leverage
+    LOWER_SANITY_CHECK = -0.1
+    UPPER_SANITY_CHECK = 1.1
 
     def __init__(self, fx_composition: pd.DataFrame, fx_prices: pd.DataFrame, target: Optional[List[str]] = None):
-        """
-        Initialize FX Spot component.
-
-        Args:
-            fx_composition: DataFrame(instruments × currencies)
-                           Index: instrument IDs
-                           Columns: currency codes (USD, GBP, etc.)
-                           Values: weights in decimal (0.65 = 65%)
-                           Sparse OK (NaN treated as 0)
-            fx_prices: DataFrame(dates × currencies) with FX prices
-            target: Optional list of instrument IDs to apply adjustments to
-        """
         super().__init__(target)
-
-        # Fill NaN with 0 and validate currencies
         self.fx_composition = fx_composition.fillna(0.0).copy()
         self._fx_prices = normalize_fx_columns(fx_prices)
+        self._adjustments_cache: Optional[pd.DataFrame] = None
+        self._fx_returns_cache: Optional[pd.DataFrame] = None
 
-        # Validate currency codes
-        for ccy in self.fx_composition.columns:
-            if not CurrencyEnum.exists(str(ccy)):
-                logger.warning(f"FxSpotComponent: Unknown currency in composition: {ccy}")
-
-        # Sanity check per instrument
         for instrument_id in self.fx_composition.index:
             total = self.fx_composition.loc[instrument_id].sum()
-
             if not (self.LOWER_SANITY_CHECK <= total <= self.UPPER_SANITY_CHECK):
-                logger.warning(
-                    f"FxSpotComponent: {instrument_id} composition sums to {total:.2%}, "
-                    f"expected [{self.LOWER_SANITY_CHECK:.0%}, {self.UPPER_SANITY_CHECK:.0%}]"
-                )
+                logger.warning(f"{instrument_id} composition sums to {total:.2%}")
 
-            # Add EUR remainder if needed
             eur_weight = 1.0 - total
             if abs(eur_weight) > 0.001 and 'EUR' in self.fx_composition.columns:
                 self.fx_composition.loc[instrument_id, 'EUR'] += eur_weight
 
-        # Validate target compatibility
-        if self.target is not None:
-            missing_data = self.target - set(self.fx_composition.index)
-            if missing_data:
-                logger.warning(
-                    f"FxSpotComponent: Target contains {len(missing_data)} instruments "
-                    f"without FX composition: {sorted(missing_data)[:5]}{'...' if len(missing_data) > 5 else ''}. "
-                    "These will receive zero FX spot adjustments."
-                )
-
-        logger.info(
-            f"FxSpotComponent: {len(self.fx_composition)} instruments, "
-            f"{len(self.fx_composition.columns)} currencies"
-            f"{f', target={len(self.target)} instruments' if self.target else ''}"
-        )
-
     def is_updatable(self) -> bool:
-        """This component supports data updates"""
         return True
 
     @property
     def updatable_fields(self) -> set[str]:
-        """Declare updatable fields (subscription model)"""
         return {"fx_prices"}
 
-    def append_data(self, *, fx_prices: Optional[pd.DataFrame] = None) -> None:
-        """
-        Append new FX price data permanently.
-
-        Args:
-            fx_prices: New FX price DataFrame (dates × currencies)
-
-        Raises:
-            ValueError: If fx_prices is invalid (not DataFrame or empty)
-        """
+    def append_data(self, timestamp: pd.Timestamp, *, fx_prices: Optional[pd.Series] = None, **kwargs) -> None:
         if fx_prices is None:
             return
 
-        # Validate
-        if not isinstance(fx_prices, pd.DataFrame):
-            raise ValueError("fx_prices must be DataFrame")
-        if fx_prices.empty:
-            raise ValueError("fx_prices cannot be empty")
+        fx_prices = add_time_tag(fx_prices, timestamp)
 
-        # Normalize columns
-        new_fx_prices = normalize_fx_columns(fx_prices)
-
-        # Permanently append
-        # Note: Don't use drop_duplicates() on values, only on index (to remove duplicate timestamps)
-        self._fx_prices = pd.concat([self._fx_prices, new_fx_prices]).sort_index()
-        # Remove duplicate index entries (keep last)
+        self._fx_prices = pd.concat([self._fx_prices, normalize_fx_columns(fx_prices)]).sort_index()
         self._fx_prices = self._fx_prices[~self._fx_prices.index.duplicated(keep='last')]
-        logger.debug(f"FxSpotComponent: Appended fx_prices (now {len(self._fx_prices)} rows)")
+
+        if self._fx_returns_cache is not None and len(self._fx_returns_cache) > 0:
+            self._fx_returns_cache = self._fx_returns_cache.iloc[:-1]
+
+        if self._adjustments_cache is not None and len(self._adjustments_cache) > 0:
+            self._adjustments_cache = self._adjustments_cache.iloc[:-1]
 
     def save_state(self) -> dict:
-        """Save current state for restoration"""
-        return {'fx_prices': self._fx_prices.copy()}
+        return {
+            'fx_prices': self._fx_prices.copy(),
+            'fx_returns_cache': self._fx_returns_cache.copy() if self._fx_returns_cache is not None else None,
+            'adjustments_cache': self._adjustments_cache.copy() if self._adjustments_cache is not None else None
+        }
 
     def restore_state(self, state: dict) -> None:
-        """Restore saved state"""
         self._fx_prices = state['fx_prices']
+        if (fx_cache := state.get('fx_returns_cache')) is not None:
+            self._fx_returns_cache = fx_cache
+        if (adj_cache := state.get('adjustments_cache')) is not None:
+            self._adjustments_cache = adj_cache
 
-    def apply_temp_data(self, *, timestamp: pd.Timestamp,  fx_prices: Optional[pd.DataFrame | pd.Series] = None, **kwargs) -> None:
-        """
-        Temporarily extend fx_prices without permanent storage.
-
-        Args:
-            timestamp_: timestamp of update
-            fx_prices: Temporary FX price data
-        """
+    def apply_temp_data(self, *, timestamp: pd.Timestamp, fx_prices: Optional[pd.DataFrame | pd.Series] = None, **kwargs) -> None:
         if fx_prices is None:
             return
 
         if isinstance(fx_prices, pd.Series):
-            ts = timestamp if self.is_intraday else timestamp.normalize()
-            fx_prices = fx_prices.to_frame(ts).T
+            fx_prices = fx_prices.to_frame(timestamp).T
 
-        # Validate
-        if not isinstance(fx_prices, pd.DataFrame):
-            raise ValueError("fx_prices must be DataFrame")
-        if fx_prices.empty:
-            raise ValueError("fx_prices cannot be empty")
-
-        # Normalize columns
         new_fx_prices = normalize_fx_columns(fx_prices)
-
-        # Temporarily extend (will be restored by context manager)
         self._fx_prices = pd.concat([self._fx_prices, new_fx_prices]).drop_duplicates().sort_index()
-        logger.debug(f"FxSpotComponent: Temp fx_prices applied ({len(new_fx_prices)} rows)")
 
-    def is_applicable(self, instrument: InstrumentProtocol) -> bool:
-        """
-        Check applicability (domain logic only).
+        if self._fx_returns_cache is not None and len(self._fx_returns_cache) > 0:
+            self._fx_returns_cache = self._fx_returns_cache.iloc[:-1]
 
-        Applicable if:
-        - STOCK or ETP
-        - Has FX composition
-        - NOT currency_hedged (default False)
-        """
+        if self._adjustments_cache is not None and len(self._adjustments_cache) > 0:
+            self._adjustments_cache = self._adjustments_cache.iloc[:-1]
+
+    def is_applicable(self, instrument: Instrument) -> bool:
         if instrument.type not in [InstrumentType.STOCK, InstrumentType.ETP]:
             return False
-
-        if instrument.id not in self.fx_composition.index:
-            return False
-
-        return True
+        return instrument.id in self.fx_composition.index
 
     def calculate_adjustment(
         self,
-        instruments: dict[str, InstrumentProtocol],
+        instruments: dict[str, Instrument],
         dates: Union[List[date], List[datetime]],
-        prices: pd.DataFrame,
+        **kwargs,
     ) -> pd.DataFrame:
-        """
-        Calculate FX spot adjustments using vectorized matrix operations.
 
-        Performance: O(N×M×T) -> O(N×M + M×T) with matrix multiplication
-        """
-        # 1. Validate input
-        self.validate_input(instruments, dates, prices)
-
-        # 2. Normalize dates to datetime (MANDATORY)
+        self.validate_input(instruments, dates)
         dates_dt = self._normalize_dates(dates)
-
         instrument_ids = list(instruments.keys())
 
-        # 3. Filter applicable (USE should_apply)
-        applicable_ids = [
-            inst.id for inst in instruments.values()
-            if self.should_apply(inst) and inst.id in self.fx_composition.index
-        ]
+        applicable_ids = [inst.id for inst in instruments.values()
+                          if self.should_apply(inst) and inst.id in self.fx_composition.index]
 
-        # 4. Early return if no applicable
         if not applicable_ids:
-            logger.debug(
-                f"FxSpotComponent: No applicable instruments. "
-                f"Total: {len(instruments)}"
-                f"{f', target filter: {len(self.target)}' if self.target else ''}"
-            )
-            result = pd.DataFrame(0.0, index=dates_dt, columns=instrument_ids)
-            self.validate_output(result)
-            return result
+            return pd.DataFrame(0.0, index=dates_dt, columns=instrument_ids)
 
-        # 5. Log processing
-        logger.debug(
-            f"FxSpotComponent: Processing {len(applicable_ids)}/{len(instruments)} instruments"
-        )
+        if self._adjustments_cache is not None:
+            cached_dates = set(self._adjustments_cache.index)
+            missing_dates = [d for d in dates_dt if d not in cached_dates]
+            first_idx_to_calc = self._adjustments_cache.index[-1]
+        else:
+            missing_dates = dates_dt
+            first_idx_to_calc = self._fx_prices.index[0]
 
-        # 6. Calculate FX returns using return calculator
-        fx_returns = self.return_calculator.calculate_returns(self._fx_prices)
+        if not missing_dates:
+            return self._adjustments_cache.loc[dates_dt, instrument_ids].copy()
+
+        fx_returns = self.return_calculator.calculate_returns(self._fx_prices.loc[first_idx_to_calc:]).iloc[1:]
         fx_returns = fx_returns.where(fx_returns.notna(), 0.0)
 
-        # Ensure dates alignment
-        common_dates = fx_returns.index.intersection(dates_dt)
+        common_dates = fx_returns.index.intersection(missing_dates)
         if len(common_dates) == 0:
-            logger.error(
-                f"FxSpotComponent: ZERO adjustments - no date overlap. "
-                f"FX dates: {fx_returns.index.min()} to {fx_returns.index.max()}, "
-                f"Requested: {dates_dt[0]} to {dates_dt[-1]}. "
-                "Check data alignment."
-            )
+            logger.error(f"No date overlap: FX {fx_returns.index.min()} to {fx_returns.index.max()}, Requested {missing_dates[0]} to {missing_dates[-1]}")
             result = pd.DataFrame(0.0, index=dates_dt, columns=instrument_ids)
             self.validate_output(result)
             return result
 
-        # 7. Get composition matrix for applicable instruments
-        comp_matrix = self.fx_composition.loc[applicable_ids]  # N × M
-
-        # Align currencies between composition and fx_returns
+        comp_matrix = self.fx_composition.loc[applicable_ids]
         common_currencies = comp_matrix.columns.intersection(fx_returns.columns)
-        if len(common_currencies) == 0:
-            logger.error(f"FxSpotComponent: No currency overlap. Composition currencies: "
-                         f"{list(comp_matrix.columns)}, FX currencies: {list(fx_returns.columns)}")
 
+        if len(common_currencies) == 0:
+            logger.error(f"No currency overlap")
             result = pd.DataFrame(0.0, index=dates_dt, columns=instrument_ids)
             self.validate_output(result)
             return result
 
         comp_matrix = comp_matrix[common_currencies]
-        fx_ret_matrix = fx_returns[common_currencies]  # T × M
-
-        # 8. Matrix multiplication: (N × M) @ (M × T)^T = N × T
-        # weighted_fx: instruments × dates
+        fx_ret_matrix = fx_returns.loc[common_dates, common_currencies]
         weighted_fx = comp_matrix @ fx_ret_matrix.T
-
-        # Transpose to dates × instruments
         result_applicable = weighted_fx.T
 
-        # 9. Subtract trading currency return per instrument
         for inst_id in applicable_ids:
             trading_ccy = str(instruments[inst_id].currency)
-
             if trading_ccy != 'EUR' and trading_ccy in fx_returns.columns:
-                # Subtract trading currency return
-                result_applicable[inst_id] = (
-                    result_applicable[inst_id] - fx_returns[trading_ccy]
-                )
+                result_applicable[inst_id] = result_applicable[inst_id] - fx_returns[trading_ccy]
 
-        # 10. Create full result DataFrame
-        result = pd.DataFrame(0.0, index=dates_dt, columns=instrument_ids, dtype='float64')
-
-        # Fill with calculated values (align dates)
+        new_adjustments = pd.DataFrame(0.0, index=missing_dates, columns=instrument_ids, dtype='float64')
         for inst_id in applicable_ids:
-            result.loc[common_dates, inst_id] = result_applicable[inst_id].astype('float64')
+            new_adjustments.loc[common_dates, inst_id] = result_applicable[inst_id].astype('float64')
 
-        # 11. Summary logging
-        non_zero = (result != 0).sum().sum()
-        if non_zero == 0:
-            logger.debug(
-                f"FxSpotComponent: ZERO non-zero adjustments for "
-                f"{len(applicable_ids)} instruments (expected if no FX movement)"
-            )
+        if self._adjustments_cache is None:
+            self._adjustments_cache = new_adjustments
         else:
-            mean_adj = result[applicable_ids].mean().mean()
-            logger.debug(
-                f"FxSpotComponent: Generated {non_zero} non-zero adjustments, "
-                f"mean FX impact: {mean_adj:.6f}"
-            )
+            self._adjustments_cache = pd.concat([self._adjustments_cache, new_adjustments]).sort_index()
 
-        # 12. Validate output
+        self.save_state()
+
+        result = self._adjustments_cache.loc[dates_dt, instrument_ids].copy()
         self.validate_output(result)
-
         return result
-
-    def __repr__(self) -> str:
-        return f"FxSpotComponent(instruments={len(self.fx_composition)})"

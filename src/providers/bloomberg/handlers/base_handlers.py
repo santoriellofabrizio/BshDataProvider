@@ -355,9 +355,9 @@ class DailyPriceHandler(Handler, ABC):
 
 class IntradayPriceHandler(Handler, ABC):
     """
-    Abstract base class for intraday price handlers.
+    Abstract base class for is_intraday price handlers.
 
-    Intraday handlers process intraday bar data.
+    Intraday handlers process is_intraday bar data.
     """
 
     def set_next(self, handler: 'IntradayPriceHandler') -> 'IntradayPriceHandler':

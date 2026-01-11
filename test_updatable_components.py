@@ -100,7 +100,7 @@ def test_basic_calculation():
     )
 
     # Calculate
-    adjustments = adjuster.calculate()
+    adjustments = adjuster.calculate_adjustments()
     print(f"\nAdjustments shape: {adjustments.shape}")
     print(f"Non-zero adjustments: {(adjustments != 0).sum().sum()}")
     print(f"Mean adjustment: {adjustments.mean().mean():.6f}")
@@ -123,7 +123,7 @@ def test_basic_calculation():
 
     # Get raw prices and clean returns
     raw_prices = adjuster.prices
-    clean_returns = adjuster.clean_returns()
+    clean_returns = adjuster.get_clean_returns()
     raw_returns = raw_prices.pct_change(fill_method=None).fillna(0.0)
     rebased = adjuster.clean_prices(backpropagate=False, rebase=True)
     rebased.plot()
@@ -352,7 +352,7 @@ def test_adjustment_rule():
     instruments = {inst_id: MockInstrument(inst_id) for inst_id in instrument_ids}
 
     # Create adjuster with NO components, forward-fill NaN values
-    adjuster_no_components = Adjuster(etf_prices, instruments=instruments, fill_missing='ffill')
+    adjuster_no_components = Adjuster(etf_prices, instruments=instruments)
 
     # Get clean prices
     clean_prices = adjuster_no_components.clean_prices(backpropagate=False)
@@ -383,7 +383,7 @@ def test_adjustment_rule():
 
         # Check raw returns around NaN
         raw_returns = raw_prices.pct_change(fill_method=None).fillna(0.0)
-        clean_returns = adjuster_no_components.clean_returns()
+        clean_returns = adjuster_no_components.get_clean_returns()
 
         print(f"\nRaw returns around first NaN (IUSA column):")
         first_nan_idx = raw_prices['IUSA'].isna().idxmax()

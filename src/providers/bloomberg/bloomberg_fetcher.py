@@ -189,7 +189,7 @@ class BloombergFetcher(BaseFetcher):
     @cache_bsh_data
     def fetch_intraday(self, requests: List[BaseMarketRequest]) -> dict:
         """
-        Fetch intraday bar data for a single instrument.
+        Fetch is_intraday bar data for a single instrument.
 
         Args:
             requests: Market data request object list
@@ -197,6 +197,6 @@ class BloombergFetcher(BaseFetcher):
         Returns:
             Dict[field, Dict[datetime, value]]
         """
-        logger.info(f"Fetching Bloomberg intraday for {len(requests)} instruments")
+        logger.info(f"Fetching Bloomberg is_intraday for {len(requests)} instruments")
         return self.intraday_handler.handle(requests, self.session, self.service)
 

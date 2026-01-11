@@ -9,7 +9,7 @@ and routes requests according to their type and frequency.
 Responsibilities:
     - Start and manage Bloomberg API sessions
     - Open the Bloomberg RefData service
-    - Dispatch market data requests (daily, intraday, snapshots)
+    - Dispatch market data requests (daily, is_intraday, snapshots)
     - Dispatch static data requests (reference, bulk, historical)
     - Map internal BSH field names to Bloomberg field codes and back
     - Integrate with :class:`BloombergFetcher` for all data retrieval
@@ -51,7 +51,7 @@ class BloombergProvider(BaseProvider):
 
     Responsibilities:
         - Manage Bloomberg connection and service lifecycle
-        - Dispatch all request types (daily, intraday, snapshot, reference, historical, bulk)
+        - Dispatch all request types (daily, is_intraday, snapshot, reference, historical, bulk)
         - Automatically map field names between internal (BSH) and Bloomberg format
         - Provide a unified interface for Bloomberg as part of the BSH data framework
 
@@ -87,7 +87,7 @@ class BloombergProvider(BaseProvider):
     def fetch_market_data(self, requests: List[BaseMarketRequest]) -> Dict:
         """
         Entry point unificato.
-        Riceve sempre una lista di richieste omogenee (tutte daily / intraday / snapshot).
+        Riceve sempre una lista di richieste omogenee (tutte daily / is_intraday / snapshot).
         """
         if not requests:
             logger.warning("Empty request list passed to BloombergProvider")
@@ -107,7 +107,7 @@ class BloombergProvider(BaseProvider):
 
         # === Caso Intraday ===
         else:
-            logger.debug("Dispatching Bloomberg intraday fetch")
+            logger.debug("Dispatching Bloomberg is_intraday fetch")
             return self.fetcher.fetch_intraday(requests)
 
     def fetch_info_data(self, requests: List[BaseStaticRequest]) -> None | dict | dict[Any, Any]:

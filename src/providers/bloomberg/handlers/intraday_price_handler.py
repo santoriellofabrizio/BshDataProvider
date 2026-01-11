@@ -15,9 +15,9 @@ logger = logging.getLogger(__name__)
 
 class BloombergIntradayPriceHandler(IntradayPriceHandler, BaseFetcher):
     """
-    Handler for Bloomberg intraday price data.
+    Handler for Bloomberg is_intraday price data.
 
-    Uses IntradayBarRequest to fetch intraday bar data.
+    Uses IntradayBarRequest to fetch is_intraday bar data.
     Returns format: {instrument_id: {field: {datetime: value}}}
     """
 
@@ -27,7 +27,7 @@ class BloombergIntradayPriceHandler(IntradayPriceHandler, BaseFetcher):
 
     def can_handle(self, req: BaseRequest) -> bool:
         """
-        This handler handles intraday market data requests (not snapshot).
+        This handler handles is_intraday market data requests (not snapshot).
         """
         # Check if it's NOT a daily frequency and NOT a snapshot
         freq = str(getattr(req, "frequency", "")).lower()
@@ -42,10 +42,10 @@ class BloombergIntradayPriceHandler(IntradayPriceHandler, BaseFetcher):
             service: blpapi.Service
     ) -> Dict[str, Dict[str, Dict[datetime, float]]]:
         """
-        Process Bloomberg intraday price requests.
+        Process Bloomberg is_intraday price requests.
 
         Args:
-            requests: List of intraday market requests
+            requests: List of is_intraday market requests
             session: Bloomberg session
             service: Bloomberg refdata service
 
@@ -57,7 +57,7 @@ class BloombergIntradayPriceHandler(IntradayPriceHandler, BaseFetcher):
 
         results = {}
 
-        # Process each request individually (intraday is not easily batchable)
+        # Process each request individually (is_intraday is not easily batchable)
         for req in requests:
             corr_id = req.instrument.id
             interval = self._parse_interval(req.frequency)
@@ -66,7 +66,7 @@ class BloombergIntradayPriceHandler(IntradayPriceHandler, BaseFetcher):
 
             # Skip if holiday
             if self.holidays.is_holiday(req.start.date(), req.market):
-                logger.info("Skipping intraday fetch: %s is a holiday for %s", req.start.date(), req.market)
+                logger.info("Skipping is_intraday fetch: %s is a holiday for %s", req.start.date(), req.market)
                 continue
 
             # Get subscription

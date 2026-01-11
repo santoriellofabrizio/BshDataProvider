@@ -22,7 +22,7 @@ def sample_isins():
 # ============================================================
 
 def test_timescale_intraday_best_sampled(api, sample_isins):
-    """Single intraday ETF request (1m best sampled)."""
+    """Single is_intraday ETF request (1m best sampled)."""
     res = api.market.get_intraday_etf(
         isin=sample_isins[0],
         start="2025-12-01",
@@ -34,10 +34,10 @@ def test_timescale_intraday_best_sampled(api, sample_isins):
     )
     print(res.head())
     assert res is not None
-    assert not res.empty, "Expected non-empty intraday DataFrame"
+    assert not res.empty, "Expected non-empty is_intraday DataFrame"
 
 def test_timescale_multi_intraday_best_sampled(api, sample_isins):
-    """Single intraday ETF request (1m best sampled)."""
+    """Single is_intraday ETF request (1m best sampled)."""
     res = api.market.get_intraday_etf(
         isin=sample_isins[:10],
         start="2025-12-01",
@@ -49,7 +49,7 @@ def test_timescale_multi_intraday_best_sampled(api, sample_isins):
     )
     print(res.head())
     assert res is not None
-    assert not res.empty, "Expected non-empty intraday DataFrame"
+    assert not res.empty, "Expected non-empty is_intraday DataFrame"
 
 
 def test_timescale_daily_fairvalue(api, sample_isins):
@@ -85,7 +85,7 @@ def test_timescale_batch_fairvalue(api, sample_isins):
 
 
 def test_timescale_batch_intraday(api, sample_isins):
-    """Batch (multi-instrument) intraday ETF data."""
+    """Batch (multi-instrument) is_intraday ETF data."""
     res = api.market.get_intraday_etf(
         isin=sample_isins,
         start="2025-12-01",
@@ -97,7 +97,7 @@ def test_timescale_batch_intraday(api, sample_isins):
     )
     df = res
     print(res.head())
-    assert not df.empty, "Expected non-empty intraday batch DataFrame"
+    assert not df.empty, "Expected non-empty is_intraday batch DataFrame"
 
 
 # ============================================================

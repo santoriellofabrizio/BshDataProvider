@@ -2,7 +2,7 @@
 timescale_provider.py — Unified provider for TimescaleDB market data.
 
 This module defines the :class:`TimescaleProvider`, the unified access layer for
-retrieving time-series and intraday data from TimescaleDB. It handles connection
+retrieving time-series and is_intraday data from TimescaleDB. It handles connection
 initialization, environment-based configuration loading, and request dispatch
 through the :class:`TimescaleFetcher`.
 
@@ -37,7 +37,7 @@ logger = logging.getLogger(__name__)
 
 class TimescaleProvider(BaseProvider):
     """
-    Unified provider for TimescaleDB market data (daily and intraday).
+    Unified provider for TimescaleDB market data (daily and is_intraday).
 
     The TimescaleProvider centralizes all access to time-series data stored in
     TimescaleDB, grouping requests and routing them to a unified fetcher.
@@ -49,7 +49,7 @@ class TimescaleProvider(BaseProvider):
         - Initialize the :class:`QueryTimeScale` client
         - Dispatch market requests by instrument type and frequency
         - Route to the :class:`TimescaleFetcher`
-        - Handle both daily (EOD) and intraday series retrieval
+        - Handle both daily (EOD) and is_intraday series retrieval
 
     Args:
         config_manager: ConfigManager instance (preferred, uses cached config)
@@ -137,7 +137,7 @@ class TimescaleProvider(BaseProvider):
     def fetch_market_data(self, requests: Union[BaseMarketRequest, List[BaseMarketRequest]]) -> Dict:
         """
         Entry point principale.
-        Raggruppa le richieste per (daily/intraday, instrument_type, currency)
+        Raggruppa le richieste per (daily/is_intraday, instrument_type, currency)
         e le instrada verso il metodo corretto di TSTimescaleFetcher.
         """
         if isinstance(requests, BaseMarketRequest):
@@ -149,7 +149,7 @@ class TimescaleProvider(BaseProvider):
 
         grouped: Dict[Tuple[str, InstrumentType, str], List[BaseMarketRequest]] = defaultdict(list)
         for req in requests:
-            freq_type = "daily" if isinstance(req, DailyRequest) else "intraday"
+            freq_type = "daily" if isinstance(req, DailyRequest) else "is_intraday"
             inst_type = InstrumentType.from_str(req.instrument.type)
             currency = req.instrument.currency or "UNKNOWN"
             grouped[(freq_type, inst_type, currency)].append(req)

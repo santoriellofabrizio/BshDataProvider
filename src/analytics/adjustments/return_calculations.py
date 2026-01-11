@@ -82,6 +82,41 @@ class ReturnCalculator:
         else:
             raise ValueError(f"Return type {self.return_type.value} not supported")
 
+    def calculate_return_from_to(self, price_from: pd.Series | float, price_to: pd.Series | float) -> pd.Series | float:
+        """
+        Calculate return from price A to price B.
+
+        Args:
+            price_from: Starting price (Series or scalar)
+            price_to: Ending price (Series or scalar)
+
+        Returns:
+            Return (Series or scalar) from price_from to price_to
+
+        Formula:
+            - Percentage: (P_to - P_from) / P_from
+            - Logarithmic: log(P_to / P_from)
+            - Absolute: P_to - P_from
+
+        Usage:
+            # Single return
+            ret = calc.calculate_return_from_to(100.0, 105.0)  # 0.05
+
+            # Vector of returns
+            ret = calc.calculate_return_from_to(
+                prices.iloc[0],  # Series at t=0
+                prices.iloc[1]   # Series at t=1
+            )
+        """
+        if self.return_type == ReturnType.PERCENTAGE:
+            return (price_to - price_from) / price_from
+        elif self.return_type == ReturnType.LOGARITHMIC:
+            return np.log(price_to / price_from)
+        elif self.return_type == ReturnType.ABSOLUTE:
+            return price_to - price_from
+        else:
+            raise ValueError(f"Return type {self.return_type.value} not supported")
+
     def accumulate_returns(self, returns: pd.DataFrame) -> pd.DataFrame:
         """
         Accumulate returns over time to get cumulative returns.

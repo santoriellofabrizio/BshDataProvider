@@ -212,10 +212,10 @@ class DailyRequest(BaseMarketRequest):
 
 @dataclass(kw_only=True)
 class IntradayRequest(BaseMarketRequest):
-    """Richiesta dati intraday (tick, 1m, 5m, ecc.)."""
+    """Richiesta dati is_intraday (tick, 1m, 5m, ecc.)."""
     interval: str = "1m"
     event: Optional[str] = None  # es. TRADE, BID, ASK (solo Bloomberg)
-    request_type = "intraday"
+    request_type = "is_intraday"
 
     def __post_init__(self):
         super().__post_init__()

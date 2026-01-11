@@ -1,53 +1,127 @@
-from datetime import time
-
+"""
+Script minimale per calcolare clean returns usando l'adjuster.
+"""
+import pandas as pd
+import sys
+from pathlib import Path
+import yfinance as yf
 from matplotlib import pyplot as plt
 
-from analytics.adjustments import Adjuster
+from analytics.adjustments import InstrumentProtocol
 from analytics.adjustments.dividend import DividendComponent
 from analytics.adjustments.fx_forward_carry import FxForwardCarryComponent
-from analytics.adjustments.fx_spot import FxSpotComponent
-from analytics.adjustments.ter import TerComponent
-from core.enums.currencies import CurrencyEnum
 from interface.bshdata import BshData
+from test_simulate_init import etf_prices
+
+# Add src to path
+sys.path.insert(0, str(Path(__file__).parent / "src"))
+
+from analytics.adjustments.adjuster import Adjuster
+from analytics.adjustments.ter import TerComponent
+from analytics.adjustments.fx_spot import FxSpotComponent
+from core.enums.instrument_types import InstrumentType
+
+# Data directory
+DATA_DIR = Path(r"C:\Users\GBS08935\Desktop\dataEquity")
 
 
-def test_comparison_adjustment_equity(start, end, tickers, snapshot_time=time(16)):
-
-    api = BshData()
-    currencies = [c for c in CurrencyEnum.__members__]
-    eur_currency_list = [f"EUR{c}" for c in currencies]
-
-    etf_prices = api.market.get_daily_etf(start=start, end=end, ticker=tickers, snapshot_time=snapshot_time)
-    fx_prices = api.market.get_daily_currency(start=start, end=end, id=eur_currency_list, snapshot_time=snapshot_time)
-
-    dividends = api.info.get_dividends(start=start, end=end, ticker=tickers)
-    ter = api.info.get_ter(ticker=tickers)/100
-    fx_comp = api.info.get_fx_composition(ticker=tickers, fx_fxfwrd="fx")
-    fx_forward_comp = api.info.get_fx_composition(ticker=tickers, fx_fxfwrd="fxfwrd")
-
-    fx_forward_prices = api.market.get_fx_forward_prices(base_currency="EUR",
-                                                         quoted_currency=currencies,
-                                                         start=start,
-                                                         end=end,
-                                                         tenor="1M")
-
-    adjuster = Adjuster(etf_prices).add(
-        FxSpotComponent(fx_comp, fx_prices)).add(
-        FxForwardCarryComponent(fx_forward_comp, fx_forward_prices, "1M", fx_prices)).add(
-        TerComponent(ter)).add(
-        DividendComponent(dividends, fx_prices))
-
-    returns = adjuster.clean_returns()
-    clean_prices = adjuster.clean_returns()
-
-    clean_prices.plot()
-    plt.show()
+class MockInstrument:
+    """Mock instrument per test senza database"""
+    def __init__(self, instrument_id):
+        self.id = instrument_id
+        self.isin = instrument_id
+        self.type = InstrumentType.ETP
+        self.currency = "EUR"
+        self.underlying_type = "EQUITY"
+        self.payment_policy = "DIST"
+        self.fund_currency = "EUR"
+        self.currency_hedged = False
 
 
+# Carica dati
+print("Caricamento dati...")
+etf_prices = pd.read_parquet(DATA_DIR / "ETF_prices.parquet")
+fx_prices = pd.read_parquet(DATA_DIR / "FX_prices.parquet")
+fx_composition = pd.read_parquet(DATA_DIR / "FX_composition.parquet")
+fx_forward_composition = pd.read_parquet(DATA_DIR / "FX_forward.parquet")
+fx_forward_prices = pd.read_parquet(DATA_DIR / "FX_forward_prices.parquet")
+ter = pd.read_csv('ter.csv').iloc[:,-1]/100
+dividends = pd.read_csv('dividends.csv').set_index('Date')
 
-if __name__ == "__main__":
+print(f"ETF prices: {etf_prices.shape}")
+print(f"FX prices: {fx_prices.shape}")
+print(f"FX composition: {fx_composition.shape}")
 
-    start = "2025-09-01"
-    end = "2025-12-31"
-    tickers = ["AWSRIA","AWSRIE"]
-    test_comparison_adjustment_equity(start, end, tickers)
+# Crea TER dummy (0.2% per tutti)
+instrument_ids = etf_prices.columns.tolist()
+tickers = pd.read_csv("tickers.csv").set_index("Unnamed: 0")["TICKER"].to_dict()
+subs = {isin: f"{ticker}.MI" for isin, ticker in tickers.items()}
+
+data = {}
+
+etf_prices.drop("2025-12-19", inplace=True)
+# Crea mock instruments
+instruments = {inst_id: MockInstrument(inst_id) for inst_id in instrument_ids}
+
+# Crea adjuster
+print("Creazione adjuster...")
+adjuster = (
+    Adjuster(etf_prices.interpolate(method='time'), instruments=instruments)
+    .add(TerComponent(ter))
+    .add(FxSpotComponent(fx_composition, fx_prices))
+    .add(FxForwardCarryComponent(fx_forward_composition, fx_forward_prices, "1M", fx_prices))
+    .add(DividendComponent(dividends,etf_prices, fx_prices))
+)
+
+# Calcola adjustments
+print("\nCalcolo adjustments...")
+adjustments = adjuster.calculate_adjustments()
+
+print(f"\nAdjustments:")
+print(f"  Shape: {adjustments.shape}")
+print(f"  Non-zero: {(adjustments != 0).sum().sum()}")
+print(f"  Mean: {adjustments.mean().mean():.6f}")
+print(f"  Min: {adjustments.min().min():.6f}")
+print(f"  Max: {adjustments.max().max():.6f}")
+
+# Calcola raw returns
+print("\nCalcolo raw returns...")
+raw_returns = etf_prices.pct_change(fill_method=None)
+
+
+# Calcola clean returns
+print("Calcolo clean returns...")
+clean_returns = adjuster.get_clean_returns()
+clean_prices = adjuster.clean_prices()
+clean_prices /= clean_prices.iloc[0]
+
+clean_prices.plot()
+plt.show()
+
+print(f"\nRaw returns:")
+print(f"  Mean: {raw_returns.mean().mean():.6f}")
+print(f"  Std: {raw_returns.std().mean():.6f}")
+
+print(f"\nClean returns:")
+print(f"  Mean: {clean_returns.mean().mean():.6f}")
+print(f"  Std: {clean_returns.std().mean():.6f}")
+
+print(f"\nDifferenza (clean - raw):")
+diff = clean_returns - raw_returns
+print(f"  Mean: {diff.mean().mean():.6f}")
+print(f"  Max: {diff.max().max():.6f}")
+
+clean_returns.rename(tickers,axis=1, inplace=True)
+
+print(adjuster.get_breakdown())
+
+subset = ["AWSRIA","AWSRIE"]
+
+rets = clean_returns[subset]
+
+compare = ((1+rets).cumprod() - 1)
+print(compare*10000)
+compare.plot()
+plt.show()
+
+print("\nFatto!")

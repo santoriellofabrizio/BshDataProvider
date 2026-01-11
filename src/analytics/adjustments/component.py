@@ -7,7 +7,7 @@ import pandas as pd
 import logging
 from typing import Union, List, Optional, TYPE_CHECKING
 
-from analytics.adjustments.protocols import InstrumentProtocol
+from core.instruments.instruments import Instrument
 
 if TYPE_CHECKING:
     from analytics.adjustments.return_calculations import ReturnCalculator
@@ -70,7 +70,7 @@ class Component(ABC):
         return False
 
     @abstractmethod
-    def is_applicable(self, instrument: InstrumentProtocol) -> bool:
+    def is_applicable(self, instrument: Instrument) -> bool:
         """
         Check if component applies to this instrument (domain logic only).
 
@@ -89,7 +89,7 @@ class Component(ABC):
         """
         pass
 
-    def should_apply(self, instrument: InstrumentProtocol) -> bool:
+    def should_apply(self, instrument: Instrument) -> bool:
         """
         Check if component should apply to this instrument (domain + target filter).
         
@@ -114,28 +114,11 @@ class Component(ABC):
         return instrument.id in self.target
 
     @staticmethod
-    def validate_input(instruments: dict[str, InstrumentProtocol], dates: Union[List[date], List[datetime]],
-                       prices: pd.DataFrame) -> None:
-        """
-        Validate input data, raise ValueError if invalid.
-
-        Default implementation validates basic requirements.
-        Override for component-specific validation.
-
-        Args:
-            instruments: Dict[instrument_id -> Instrument object]
-            dates: List of dates
-            prices: DataFrame(dates x instruments)
-
-        Raises:
-            ValueError: If validation fails
-        """
+    def validate_input(instruments: dict[str, Instrument], dates: Union[List[date], List[datetime]]) -> None:
         if not instruments:
             raise ValueError("instruments cannot be empty")
         if not dates:
             raise ValueError("dates cannot be empty")
-        if prices.empty:
-            raise ValueError("prices cannot be empty")
 
     @staticmethod
     def validate_output(result: pd.DataFrame) -> None:
@@ -159,9 +142,8 @@ class Component(ABC):
     @abstractmethod
     def calculate_adjustment(
             self,
-            instruments: dict[str, InstrumentProtocol],
+            instruments: dict[str, Instrument],
             dates: Union[List[date], List[datetime]],
-            prices: pd.DataFrame,
     ) -> pd.DataFrame:
         """
         Calculate adjustments (vectorized).
@@ -172,7 +154,6 @@ class Component(ABC):
         Args:
             instruments: Dict[instrument_id -> Instrument object]
             dates: List of dates (date or datetime objects)
-            prices: DataFrame(dates × instruments) with prices
 
         Returns:
             DataFrame(dates × instruments) with adjustments

@@ -198,7 +198,7 @@ class BloombergSnapshotPriceHandler(IntradayPriceHandler, BaseFetcher):
                     day, snap_dt = correlation_map[msg_corr_id]
 
                     try:
-                        # Parse intraday bars from message
+                        # Parse is_intraday bars from message
                         bars = self._parse_intraday_bars_from_message(msg, ohlc_field)
 
                         if bars:
@@ -236,7 +236,7 @@ class BloombergSnapshotPriceHandler(IntradayPriceHandler, BaseFetcher):
     @staticmethod
     def _parse_intraday_bars_from_message(msg, ohlc_field: str = "close") -> Dict[datetime, float]:
         """
-        Parse intraday bars from a Bloomberg IntradayBarResponse message.
+        Parse is_intraday bars from a Bloomberg IntradayBarResponse message.
 
         Args:
             msg: Bloomberg message object
@@ -267,7 +267,7 @@ class BloombergSnapshotPriceHandler(IntradayPriceHandler, BaseFetcher):
                     bars[bar_time] = bar_value
 
         except Exception as e:
-            logger.warning("Error parsing intraday bars from message: %s", e)
+            logger.warning("Error parsing is_intraday bars from message: %s", e)
 
         return bars
 
