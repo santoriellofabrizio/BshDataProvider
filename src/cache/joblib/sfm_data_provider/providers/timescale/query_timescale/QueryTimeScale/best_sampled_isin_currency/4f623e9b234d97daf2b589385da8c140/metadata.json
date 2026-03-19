@@ -1,0 +1,1 @@
+{"duration": 2.643193006515503, "input_args": {"date": "datetime.date(2026, 1, 28)", "market": "'EURONEXT'", "isin": "('IE00099GAJC6', 'IE000K9Z3SF5', 'IE00BF4NQ904', 'LU0779800910', 'LU0875160326', 'LU1900067940', 'LU1900068914', 'LU2265794276', 'LU2265794946', 'LU2376679564')", "seconds_sampling": "60", "currency": "'EUR'", "segment": "None"}, "time": 1770382150.052864}

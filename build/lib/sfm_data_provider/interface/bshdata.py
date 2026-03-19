@@ -1,0 +1,183 @@
+import logging
+import os
+import sys
+from sfm_data_provider.client import BSHDataClient
+from sfm_data_provider.core.utils.addin_config_manager import AddinConfigManager
+from sfm_data_provider.core.utils.config_manager import ConfigManager
+from sfm_data_provider.core.utils.memory_provider import enable_cache, set_cache_dir, disable_cache
+from sfm_data_provider.interface.api.general_data_api import GeneralDataAPI
+from sfm_data_provider.interface.api.info_data_api import InfoDataAPI
+from sfm_data_provider.interface.api.market_api import MarketDataAPI
+
+CONFIG_PATH = "config/bshdata_config.yaml"
+
+
+class BshData:
+    """
+    Unified facade for all data APIs: dynamic data (.market), static information (.info),
+    and general utilities (.general).
+
+    This class provides a single entry point for interacting with the BSH data layer.
+
+    Responsibilities:
+        - Centralized logging (initialized once per process)
+        - Global cache management (can be enabled or disabled)
+        - Initialization of the client and all submodules (market, info, general)
+        - Optional autocomplete for missing data or metadata, resolved via Oracle
+
+    Args:
+        config_path (str | None): Path to the YAML configuration file.
+            If not provided, the default ``CONFIG_PATH`` is used.
+        cache (bool): Whether to enable global caching. Defaults to True.
+        log_level (str | None): Logging level for console output.
+        log_file (str | None): Path for the log file.
+        log_level_file (str | None): Log level for file logging (may differ from console).
+        autocomplete (bool | None): Enables automatic lookup of missing data or
+            instrument metadata using Oracle. Defaults to the value in the config.
+        **kwargs: Additional parameters passed to client initialization.
+
+    Example:
+        >>> bsh = BshData(config_path="config/db.yaml", cache=True)
+        >>> etf_data = bsh.market.get_daily_etf("IE00B4L5Y983", "2024-01-01", "2024-02-01")
+
+    """
+
+    # ============================================================A
+    # INIT
+    # ============================================================
+    def __init__(self,
+                 config_path: str | None = CONFIG_PATH,
+                 cache=True,
+                 log_level=None,
+                 log_file=None,
+                 log_level_file: str = None,
+                 autocomplete=True,
+                 add_in_mode: bool = False,
+                 **kwargs) -> None:
+
+        # Load config using ConfigManager (cached, validated)
+        if add_in_mode:
+            self._config_manager = AddinConfigManager.load(config_path)
+        else:
+            self._config_manager = ConfigManager.load(config_path)
+        
+        # Get API config with constructor overrides
+        api_config = self._config_manager.get_api_config(
+            log_level=log_level,
+            log_file=log_file,
+            log_level_file=log_level_file,
+            autocomplete=autocomplete,
+            cache=cache
+        )
+        
+        # Use config values (constructor args take precedence via get_api_config)
+        # Note: get_api_config() already applies constructor overrides, so we use those values
+        log_level = api_config.log_level or "INFO"
+        log_file = api_config.log_file
+        log_level_file = api_config.log_level_file or api_config.log_level or "INFO"
+        autocomplete = api_config.autocomplete
+        warmup = api_config.warmup
+        cache = api_config.cache
+        cache_path = api_config.cache_path
+
+        self._setup_logging(log_level, log_file=log_file, log_level_file=log_level_file)
+        self._setup_cache(cache, cache_path)
+        self._setup_client(self._config_manager, autocomplete, warmup, **kwargs)
+
+    # ============================================================
+    # CACHE
+    # ============================================================
+    def _setup_cache(self, enabled: bool, cache_path) -> None:
+        """Abilita o disabilita la cache globale."""
+        if enabled:
+            enable_cache()
+            set_cache_dir(cache_path)
+            self.logger.debug("Cache abilitata. path: {}".format(cache_path))
+        else:
+            disable_cache()
+            self.logger.debug("Cache disabilitata.")
+
+    @staticmethod
+    def enable_cache() -> None:
+        enable_cache()
+
+    @staticmethod
+    def disable_cache() -> None:
+        disable_cache()
+
+    # ============================================================
+    # CLIENT E API
+    # ============================================================
+    def _setup_client(self, config_manager: ConfigManager, autocomplete, warmup, **kwargs) -> None:
+        """Crea il client dati e inizializza le API."""
+        self.client = BSHDataClient(config_manager=config_manager)
+        self.market = MarketDataAPI(self.client, autocomplete=autocomplete)
+        self.info = InfoDataAPI(self.client, autocomplete=autocomplete)
+        self.general = GeneralDataAPI(self.client, autocomplete=autocomplete)
+        self.logger.info("BshData inizializzata con successo.")
+
+    # ============================================================
+    # LOGGING
+    # ============================================================
+
+    def _setup_logging(self, log_level: str, log_file: str | None = None, log_level_file: str | None = None) -> None:
+        """Configura logging globale su console e (opzionale) su file."""
+
+        root_logger = logging.getLogger()
+
+        if not root_logger.handlers:
+            # Formatter unico
+            formatter = logging.Formatter(
+                "%(asctime)s | %(processName)s | %(levelname)-8s | %(name)s | %(message)s",
+                datefmt="%H:%M:%S",
+            )
+
+            # Stream handler (console)
+            console_handler = logging.StreamHandler(sys.stdout)
+            console_handler.setFormatter(formatter)
+            root_logger.addHandler(console_handler)
+
+            # File handler (solo se richiesto)
+            if log_file:
+                os.makedirs(os.path.dirname(log_file), exist_ok=True)
+                file_handler = logging.FileHandler(log_file, mode="a", encoding="utf-8")
+                file_handler.setFormatter(formatter)
+                file_handler.setLevel(log_level_file)
+                root_logger.addHandler(file_handler)
+
+
+            # Livello globale
+            root_logger.setLevel(getattr(logging, log_level.upper(), logging.INFO))
+
+        # Logger locale
+        self.logger = logging.getLogger(__name__)
+
+        # Silenzia librerie rumorose
+        for lib in ["urllib3", "requests", "sqlalchemy", "blpapi", "pandas", "numexpr", "asyncio"]:
+            logging.getLogger(lib).setLevel(logging.WARNING)
+
+        self.logger.info("Logging inizializzato.")
+
+    def set_log_level(self, log_level: str) -> None:
+        """Cambia il livello di log a runtime."""
+        level = getattr(logging, log_level.upper(), None)
+        if level is None:
+            raise ValueError(f"Livello log non valido: {log_level}")
+        self.logger.setLevel(level)
+        self.logger.info(f"Livello log impostato a {log_level}.")
+
+
+
+class BshDataSingleton:
+    _instance = None
+
+    @classmethod
+    def get(cls) -> BshData:
+        if cls._instance is None:
+            cls._instance = BshData(config_path=None, add_in_mode=True)
+        return cls._instance
+
+    @classmethod
+    def reset(cls):
+        """Utile per testing o reconnessione forzata."""
+        cls._instance = None
