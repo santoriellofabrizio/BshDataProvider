@@ -1,0 +1,97 @@
+# ============================================================
+# FIELD CONFIGURATION
+# ============================================================
+# All field names are standardized in UPPERCASE for consistency
+# across the entire codebase (YAML, Python classes, handlers, requests)
+
+market:
+  # --- Campi di mercato riconosciuti ---
+  - MID
+  - BID
+  - ASK
+  - TRADE
+  - BID_SIZE
+  - ASK_SIZE
+  - SPREAD_PCT
+  - SPREAD
+  - PX_LAST
+
+info:
+  reference:
+    - TICKER
+    - DESCRIPTION
+    - INSTRUMENT_TYPE
+    - UNDERLYING_TYPE
+    - UNDERLYING_CATEGORY
+    - ETP_TYPE
+    - LEVERAGE
+    - CURRENCY_HEDGING
+    - PAYMENT_POLICY
+    - ISSUE_DATE
+    - PRIMARY_EXCHANGE_CODE
+    - TER
+    - ISIN
+    - FUND_CURRENCY
+    - PRIMARY_TICKER
+    - EXCHANGE_CODE
+    - TICKER_ROOT
+    - INDEX_NAME
+    - YTM
+    - TENOR
+    - BBG_TYPE
+    - DAY_COUNT_CONV
+    - SERIES_START_DATE
+    - CURRENCY
+    - GEOGRAPHICAL_AREA
+    - ECONOMY
+    - CREDIT_SCORE
+    - VALID_FROM
+    - SETTLEMENT_DAYS
+    - SWAP_TYPE
+    - CARRY
+
+  bulk:
+    - FX_COMPOSITION
+    - PCF_COMPOSITION
+    - MARKETS
+    - STOCK_MARKETS_INFO
+    - DIVIDEND
+
+  historical:
+    - NAV
+
+general:
+    - ETP_ISINS
+    - FUTURES
+    - AVAILABLE_FIELDS
+    - ETF_MARKETS
+    - FUTURES_IDENTIFIERS
+
+
+aliases:
+  # --- MarketField aliases ---
+  MID_PRICE: MID
+  BID_PRICE: BID
+  ASK_PRICE: ASK
+  PX_OPEN: OPEN
+  PX_HIGH: HIGH
+  PX_LOW: LOW
+  PX_CLOSE: CLOSE
+  CLOSE_PRICE: CLOSE
+  TRADE_PRICE: LAST
+  LAST_PRICE: LAST
+  BESTBID: BEST_BID
+  BESTASK: BEST_ASK
+
+  # --- StaticField aliases ---
+  EXPENSE_RATIO: TER
+  FUND_TOTAL_EXP: TER
+  TOTAL_EXPENSE_RATIO: TER
+  FX: FX_COMPOSITION
+  FX_COMP: FX_COMPOSITION
+  PCF_COMP: PCF_COMPOSITION
+  DIVIDENDS: DIVIDEND
+  LISTING: MARKETS
+  EXCHANGE: MARKETS
+  STATIC: INSTRUMENT
+  META: INSTRUMENT

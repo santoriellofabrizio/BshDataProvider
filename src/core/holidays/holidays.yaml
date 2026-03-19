@@ -1,0 +1,15 @@
+# holidays.yml
+default:
+  weekends: [Saturday, Sunday]
+  fixed:
+    - 01-01    # Capodanno
+    - 12-25    # Natale
+    - 12-26    # Santo Stefano
+
+markets:
+  ETFPLUS:
+    fixed:
+      - 04-25  # Festa della Liberazione
+      - 05-01  # Festa dei lavoratori
+      - 08-15  # Ferragosto
+      - 12-31  # Chiusura anticipata

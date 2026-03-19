@@ -1,0 +1,16 @@
+# Cache e Python
+__pycache__/
+*.pyc
+cache/
+cache_dir/
+
+# Dati e Analisi
+*.xlsx
+*.csv
+*.png
+*.zip
+
+# Log e segreti
+*.log
+*.txt
+.env

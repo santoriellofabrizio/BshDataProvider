@@ -1,0 +1,92 @@
+Metadata-Version: 2.1
+Name: bsh_data_provider
+Version: 1.1
+Summary: Data provider project developed by Sella Financial Markets
+Requires-Python: >=3.11
+Description-Content-Type: text/markdown
+Requires-Dist: cryptography>=46.0.3
+Requires-Dist: cvxpy>=1.5.3
+Requires-Dist: django>=5.1.5
+Requires-Dist: joblib>=1.4.2
+Requires-Dist: matplotlib>=3.9.0
+Requires-Dist: openpyxl>=3.1.2
+Requires-Dist: pytest-mock
+Requires-Dist: redis>=6.2.0
+Requires-Dist: ruamel-yaml>=0.18.6
+Requires-Dist: scipy>=1.16.0
+Requires-Dist: sfm-dbconnections>=1.0.72922
+Requires-Dist: sfm-pcf-db-library>=1.0.72038
+Requires-Dist: sfm-return-adjustment-lib>=1.0.72051
+Requires-Dist: sfm-timescaledb-queries>=1.0.72117
+Requires-Dist: tqdm>=4.64.0
+Requires-Dist: watchdog>=2.2.1
+Requires-Dist: xbbg>=0.7.7
+
+# BshDataProvider
+
+BshDataProvider è una libreria Python che fornisce un’API unificata per dati di mercato e dati statici provenienti da:
+
+- **TimescaleDB**
+- **Oracle**
+- **Bloomberg** (opzionale)
+- **Mock provider** (per test offline)
+
+Offre un’interfaccia coerente, caching integrato, normalizzazione automatica di ISIN/Ticker, e integrazione con Excel tramite xlwings.
+
+---
+
+## EntryPoint del progetto
+
+bshdata->BshData, facade per le tre api:
+
+  - general
+  - info
+  - market
+
+per info sui campi disponibili chiama BshData().general.available_fields()
+o cercare file fields.yaml
+
+## Template del file di configurazione `bshdata_config.yaml`
+
+```yaml
+timescale_connection:
+  db_name: aidb
+  port: 5432
+  user: aivwr
+  password: 
+
+oracle_connection:
+  environment: PROD
+  user: AF_QUANTLIB
+  tns_name: ORABOH
+  password: 
+  schema: AF_DATAMART_DBA
+
+client:
+  activate_oracle: True
+  activate_timescale: True
+  activate_bloomberg: True
+
+api:
+  log_level: INFO
+  log_file: logs/bshapi.log
+  log_level_file: INFO
+  autocomplete: True
+  cache: True
+  cache_path: ../cache_bsh
+
+```
+
+# How to use ? 
+
+```python
+# 1) import and instantiate api as:
+from bshDataProvider import BshData
+
+api = BshData(config_path = "<example_path>.yaml", **kwrgs)
+
+# 2) use .market .info depending on the type of data required
+
+api.market.get_daily_etf(ticker="IHYG", start="2025-10-10", **kwargs)
+
+```
