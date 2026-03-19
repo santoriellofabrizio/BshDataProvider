@@ -262,23 +262,7 @@ class Component(ABC):
                 # Now use dates_dt everywhere
                 result = pd.DataFrame(0.0, index=dates_dt, columns=...)
         """
-        normalized = []
-
-        for d in dates:
-            if isinstance(d, datetime):
-                normalized.append(d)
-            elif isinstance(d, date):
-                # Convert date to datetime at midnight
-                normalized.append(datetime.combine(d, datetime.min.time()))
-            elif isinstance(d, pd.Timestamp):
-                normalized.append(d.to_pydatetime())
-            else:
-                raise TypeError(
-                    f"Expected date or datetime, got {type(d)}. "
-                    "All dates must be date or datetime objects."
-                )
-
-        return normalized
+        return pd.to_datetime(dates).to_pydatetime().tolist()
 
     def append_data(self, **kwargs) -> None:
         """

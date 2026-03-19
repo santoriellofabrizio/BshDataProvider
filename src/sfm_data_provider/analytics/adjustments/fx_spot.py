@@ -149,10 +149,16 @@ class FxSpotComponent(Component):
         weighted_fx = comp_matrix @ fx_ret_matrix.T
         result_applicable = weighted_fx.T
 
-        for inst_id in applicable_ids:
-            trading_ccy = str(instruments[inst_id].currency)
-            if trading_ccy != 'EUR' and trading_ccy in fx_returns.columns:
-                result_applicable[inst_id] = result_applicable[inst_id] - fx_returns[trading_ccy]
+        # Vectorized trading-currency subtraction
+        non_eur_ids = [
+            iid for iid in applicable_ids
+            if str(instruments[iid].currency) != 'EUR' and str(instruments[iid].currency) in fx_returns.columns
+        ]
+        if non_eur_ids:
+            trading_ccy_returns = pd.DataFrame(
+                {iid: fx_returns.loc[common_dates, str(instruments[iid].currency)] for iid in non_eur_ids}
+            )
+            result_applicable[non_eur_ids] = result_applicable[non_eur_ids].sub(trading_ccy_returns)
 
         new_adjustments = pd.DataFrame(0.0, index=missing_dates, columns=instrument_ids, dtype='float64')
         for inst_id in applicable_ids:

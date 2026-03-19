@@ -106,30 +106,30 @@ class TerComponent(Component):
 
         is_intraday = dates_dt and any(d.hour != 0 or d.minute != 0 for d in dates_dt)
 
+        if is_intraday:
+            dates_arr = pd.DatetimeIndex(dates_dt)
+            dates_tz = dates_arr.tz
+        else:
+            dates_set = set(dates_dt)
+
         for inst_id, adjustments in self._ter_adjustments.items():
             if inst_id not in result.columns:
                 continue
 
             if is_intraday:
-                # Intraday: find interval containing midnight
+                # Intraday: use searchsorted to find the interval in O(log N)
                 for midnight_ts, adjustment in adjustments.items():
-                    if hasattr(dates_dt, 'tz') and dates_dt.tz is not None:
-                        if midnight_ts.tz is None:
-                            midnight_ts = midnight_ts.tz_localize(dates_dt.tz)
-                        else:
-                            midnight_ts = midnight_ts.tz_convert(dates_dt.tz)
-
-                    for i in range(1, len(dates_dt)):
-                        t1_ts = pd.Timestamp(dates_dt[i - 1])
-                        t2_ts = pd.Timestamp(dates_dt[i])
-                        if t1_ts < midnight_ts <= t2_ts:
-                            result.loc[dates_dt[i], inst_id] = adjustment
-                            break
+                    ts = pd.Timestamp(midnight_ts)
+                    if dates_tz is not None:
+                        ts = ts.tz_localize(dates_tz) if ts.tz is None else ts.tz_convert(dates_tz)
+                    idx = dates_arr.searchsorted(ts, side='left')
+                    if 0 < idx < len(dates_arr):
+                        result.loc[dates_dt[idx], inst_id] = adjustment
             else:
                 # Daily: apply at midnight (normalized date)
                 for midnight_ts, adjustment in adjustments.items():
                     midnight_date = midnight_ts.normalize()
-                    if midnight_date in dates_dt:
+                    if midnight_date in dates_set:
                         result.loc[midnight_date, inst_id] = adjustment
 
         return result

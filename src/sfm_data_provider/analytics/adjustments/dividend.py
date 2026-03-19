@@ -65,24 +65,30 @@ class DividendComponent(Component):
             trading_ccy = self._get_currency(inst, 'currency')
             adjustments = {}
 
+            prices_tz = getattr(self.prices.index, 'tz', None)
+            inst_in_prices = inst.id in self.prices.columns
+
             for d in div_dates:
                 div_dt = pd.Timestamp(d)
-                if hasattr(self.prices.index, 'tz') and self.prices.index.tz is not None:
+                if prices_tz is not None:
                     if div_dt.tz is None:
-                        div_dt = div_dt.tz_localize(self.prices.index.tz)
+                        div_dt = div_dt.tz_localize(prices_tz)
                     else:
-                        div_dt = div_dt.tz_convert(self.prices.index.tz)
+                        div_dt = div_dt.tz_convert(prices_tz)
 
                 div_amt = divs.loc[d]
                 if pd.isna(div_amt) or div_amt == 0:
                     continue
 
-                # Use last price before dividend (midnight event)
-                price_timestamps_before = [ts for ts in self.prices.index if ts < div_dt and inst.id in self.prices.columns]
-                if len(price_timestamps_before) == 0:
+                if not inst_in_prices:
                     continue
 
-                last_cum_timestamp = max(price_timestamps_before)
+                # Use last price before dividend (midnight event) - O(log N) via searchsorted
+                idx = self.prices.index.searchsorted(div_dt, side='left') - 1
+                if idx < 0:
+                    continue
+
+                last_cum_timestamp = self.prices.index[idx]
                 price = self.prices.loc[last_cum_timestamp, inst.id]
                 if pd.isna(price) or price <= 0:
                     continue
@@ -110,24 +116,30 @@ class DividendComponent(Component):
 
         is_intraday = dates_dt and any(d.hour != 0 or d.minute != 0 for d in dates_dt)
 
+        if is_intraday:
+            dates_arr = pd.DatetimeIndex(dates_dt)
+            dates_tz = dates_arr.tz
+        else:
+            dates_set = set(dates_dt)
+
         for inst_id, adjustments in self._normalized_dividends.items():
             if inst_id not in result.columns:
                 continue
 
             if is_intraday:
-                # Intraday: find interval containing dividend
+                # Intraday: use searchsorted to find the interval in O(log N)
                 for div_dt, adjustment in adjustments.items():
-                    for i in range(1, len(dates_dt)):
-                        t1_ts = pd.Timestamp(dates_dt[i - 1])
-                        t2_ts = pd.Timestamp(dates_dt[i])
-                        if t1_ts < div_dt <= t2_ts:
-                            result.loc[dates_dt[i], inst_id] += adjustment
-                            break
+                    ts = pd.Timestamp(div_dt)
+                    if dates_tz is not None:
+                        ts = ts.tz_localize(dates_tz) if ts.tz is None else ts.tz_convert(dates_tz)
+                    idx = dates_arr.searchsorted(ts, side='left')
+                    if 0 < idx < len(dates_arr):
+                        result.loc[dates_dt[idx], inst_id] += adjustment
             else:
                 # Daily: apply at midnight (normalized date)
                 for div_dt, adjustment in adjustments.items():
                     div_date = div_dt.normalize()
-                    if div_date in dates_dt:
+                    if div_date in dates_set:
                         result.loc[div_date, inst_id] = adjustment
 
         return result

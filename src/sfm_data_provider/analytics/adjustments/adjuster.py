@@ -123,7 +123,7 @@ class Adjuster:
             DataFrame with clean returns (cumulated or not)
         """
         raw_returns = self.return_calculator.calculate_returns(self._prices)
-        adjustments = self.calculate_adjustment(dates).iloc[::-1]
+        adjustments = self.calculate_adjustment(dates)
         if dates is not None:
             raw_returns = raw_returns.loc[dates]
         cleaned = raw_returns.add(adjustments.reindex(raw_returns.index, columns=raw_returns.columns), fill_value=0.0)

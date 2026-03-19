@@ -42,40 +42,30 @@ def calculate_year_fractions(
         # Shifted for T+2 settlement (e.g., for YTM)
         fractions_shifted = calculate_year_fractions(dates, shifted=True, settlement_days=2)
     """
-    # Convert to list if DatetimeIndex
     if isinstance(business_dates, pd.DatetimeIndex):
-        business_dates = business_dates.tolist()
+        dates_idx = business_dates.sort_values()
+        if len(dates_idx) == 0:
+            return pd.Series(dtype=float)
+    else:
+        if not business_dates:
+            return pd.Series(dtype=float)
+        dates_idx = pd.DatetimeIndex(sorted(business_dates))
 
-    if not business_dates:
-        return pd.Series(dtype=float)
-
-    dates_sorted = sorted(business_dates)
-    fractions = pd.Series(0.0, index=dates_sorted)
+    n = len(dates_idx)
 
     if shifted:
-        # Shifted fractions (for forward settlement)
-        for i, date in enumerate(dates_sorted):
-            if i < len(dates_sorted) - settlement_days:
-                next_settlement_date = dates_sorted[i + settlement_days]
-                one_day_before_settlement = dates_sorted[i + settlement_days - 1]
-                days = (next_settlement_date - one_day_before_settlement).days
-            else:
-                # Fallback for end dates
-                days = 1
-
-            fractions[date] = days / number_of_days_in_year
+        days = np.ones(n, dtype=float)
+        valid_n = n - settlement_days
+        if valid_n > 0:
+            next_dates = dates_idx[settlement_days:]
+            prev_dates = dates_idx[settlement_days - 1: n - 1]
+            days[:valid_n] = (next_dates - prev_dates).days
+        fractions = pd.Series(days / number_of_days_in_year, index=dates_idx)
     else:
-        # Standard fractions
-        for i, date in enumerate(dates_sorted):
-            if i == 0:
-                # First date: no previous date, so no return period
-                # Set to 0 to align with pct_change() behavior (first return = 0)
-                days = 0
-            else:
-                prev_date = dates_sorted[i - 1]
-                days = (date - prev_date).days
-
-                fractions[date] = days / number_of_days_in_year
+        days = np.zeros(n, dtype=float)
+        if n > 1:
+            days[1:] = (dates_idx[1:] - dates_idx[:-1]).days
+        fractions = pd.Series(days / number_of_days_in_year, index=dates_idx)
 
     return fractions
 
