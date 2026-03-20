@@ -164,11 +164,14 @@ class ReturnCalculator:
             For percentage returns, gives the return from each date t to final date T.
         """
         if self.return_type == ReturnType.PERCENTAGE:
-            return (1 + returns).iloc[::-1].cumprod().iloc[::-1] - 1
-        elif self.return_type == ReturnType.LOGARITHMIC:
-            return returns.iloc[::-1].cumsum().iloc[::-1]
-        elif self.return_type == ReturnType.ABSOLUTE:
-            return returns.iloc[::-1].cumsum().iloc[::-1]
+            arr = returns.to_numpy(dtype=float)
+            np.cumprod(1 + arr[::-1], axis=0, out=arr[::-1])
+            arr -= 1
+            return pd.DataFrame(arr, index=returns.index, columns=returns.columns)
+        elif self.return_type in (ReturnType.LOGARITHMIC, ReturnType.ABSOLUTE):
+            arr = returns.to_numpy(dtype=float)
+            np.cumsum(arr[::-1], axis=0, out=arr[::-1])
+            return pd.DataFrame(arr, index=returns.index, columns=returns.columns)
         else:
             raise ValueError(f"Return type {self.return_type.value} not supported")
 

@@ -195,13 +195,14 @@ class FxSpotComponent(Component):
                 result_applicable[inst_id] = result_applicable[inst_id] - fx_returns[trading_ccy]
 
         new_adjustments = pd.DataFrame(0.0, index=missing_dates, columns=instrument_ids, dtype='float64')
-        for inst_id in applicable_ids:
-            new_adjustments.loc[common_dates, inst_id] = result_applicable[inst_id].astype('float64')
+        # Bulk-assign all applicable instruments at once instead of 1 .loc per column
+        new_adjustments.loc[common_dates, applicable_ids] = result_applicable[applicable_ids].to_numpy()
 
         if self._adjustments_cache is None:
             self._adjustments_cache = new_adjustments
         else:
-            self._adjustments_cache = pd.concat([self._adjustments_cache, new_adjustments]).sort_index()
+            # missing_dates are always newer than cache → no sort needed
+            self._adjustments_cache = pd.concat([self._adjustments_cache, new_adjustments])
         t4 = time.perf_counter()
 
         logger.info(
