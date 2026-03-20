@@ -123,7 +123,7 @@ class Adjuster:
             DataFrame with clean returns (cumulated or not)
         """
         raw_returns = self.return_calculator.calculate_returns(self._prices)
-        adjustments = self.calculate_adjustment(dates).iloc[::-1]
+        adjustments = self.calculate_adjustment(dates)
         if dates is not None:
             raw_returns = raw_returns.loc[dates]
         cleaned = raw_returns.add(adjustments.reindex(raw_returns.index, columns=raw_returns.columns), fill_value=0.0)
@@ -167,8 +167,9 @@ class Adjuster:
         """
         timestamp = pd.Timestamp.now() if self.intraday else pd.Timestamp.now().normalize()
         prices = add_time_tag(prices, timestamp)
-        # Save current state
-        snapshot = (self._prices.copy(), {id(c): c.save_state() for c in self.components if c.is_updatable()})
+        # Save current state: store length instead of copying the full DataFrame
+        prices_len = len(self._prices)
+        component_states = {id(c): c.save_state() for c in self.components if c.is_updatable()}
 
         try:
             if prices is not None: # Apply temporary updates
@@ -180,8 +181,8 @@ class Adjuster:
             yield self
 
         finally:
-            # Restore state
-            self._prices, component_states = snapshot
+            # Restore state: truncate instead of restoring a full copy
+            self._prices = self._prices.iloc[:prices_len]
             for comp in self.components:
                 if id(comp) in component_states:
                     comp.restore_state(component_states[id(comp)])

@@ -63,18 +63,52 @@ class FxSpotComponent(Component):
             self._adjustments_cache = self._adjustments_cache.iloc[:-1]
 
     def save_state(self) -> dict:
+        # Save only lengths + last rows to avoid copying full DataFrames.
+        # apply_temp_data always appends one row to _fx_prices and drops the
+        # last row of each cache; calculate_adjustment may then extend them.
+        # Restoring by truncating to saved length + reinserting last row is sufficient.
+        fx_ret_last = (
+            self._fx_returns_cache.iloc[[-1]].copy()
+            if self._fx_returns_cache is not None and not self._fx_returns_cache.empty
+            else None
+        )
+        adj_last = (
+            self._adjustments_cache.iloc[[-1]].copy()
+            if self._adjustments_cache is not None and not self._adjustments_cache.empty
+            else None
+        )
         return {
-            'fx_prices': self._fx_prices.copy(),
-            'fx_returns_cache': self._fx_returns_cache.copy() if self._fx_returns_cache is not None else None,
-            'adjustments_cache': self._adjustments_cache.copy() if self._adjustments_cache is not None else None
+            'fx_prices_len': len(self._fx_prices),
+            'fx_returns_cache_len': len(self._fx_returns_cache) if self._fx_returns_cache is not None else None,
+            'fx_returns_cache_last': fx_ret_last,
+            'adjustments_cache_len': len(self._adjustments_cache) if self._adjustments_cache is not None else None,
+            'adjustments_cache_last': adj_last,
         }
 
     def restore_state(self, state: dict) -> None:
-        self._fx_prices = state['fx_prices']
-        if (fx_cache := state.get('fx_returns_cache')) is not None:
-            self._fx_returns_cache = fx_cache
-        if (adj_cache := state.get('adjustments_cache')) is not None:
-            self._adjustments_cache = adj_cache
+        self._fx_prices = self._fx_prices.iloc[:state['fx_prices_len']]
+
+        fx_len = state['fx_returns_cache_len']
+        if fx_len is None:
+            self._fx_returns_cache = None
+        elif fx_len == 0:
+            self._fx_returns_cache = self._fx_returns_cache.iloc[:0]
+        else:
+            self._fx_returns_cache = pd.concat([
+                self._fx_returns_cache.iloc[:fx_len - 1],
+                state['fx_returns_cache_last'],
+            ])
+
+        adj_len = state['adjustments_cache_len']
+        if adj_len is None:
+            self._adjustments_cache = None
+        elif adj_len == 0:
+            self._adjustments_cache = self._adjustments_cache.iloc[:0]
+        else:
+            self._adjustments_cache = pd.concat([
+                self._adjustments_cache.iloc[:adj_len - 1],
+                state['adjustments_cache_last'],
+            ])
 
     def apply_temp_data(self, *, timestamp: pd.Timestamp, fx_prices: Optional[pd.DataFrame | pd.Series] = None, **kwargs) -> None:
         if fx_prices is None:
@@ -162,8 +196,6 @@ class FxSpotComponent(Component):
             self._adjustments_cache = new_adjustments
         else:
             self._adjustments_cache = pd.concat([self._adjustments_cache, new_adjustments]).sort_index()
-
-        self.save_state()
 
         result = self._adjustments_cache.loc[dates_dt, instrument_ids].copy()
         self.validate_output(result)
