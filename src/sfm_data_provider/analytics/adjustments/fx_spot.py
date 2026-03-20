@@ -8,6 +8,7 @@ Updatable Fields: fx_prices
 """
 from datetime import date, datetime
 from typing import Union, List, Optional
+import time
 import pandas as pd
 import logging
 
@@ -138,6 +139,7 @@ class FxSpotComponent(Component):
         **kwargs,
     ) -> pd.DataFrame:
 
+        t0 = time.perf_counter()
         self.validate_input(instruments, dates)
         dates_dt = self._normalize_dates(dates)
         instrument_ids = list(instruments.keys())
@@ -155,12 +157,15 @@ class FxSpotComponent(Component):
         else:
             missing_dates = dates_dt
             first_idx_to_calc = self._fx_prices.index[0]
+        t1 = time.perf_counter()
 
         if not missing_dates:
+            logger.debug("FxSpotComponent cache hit — %.1fms", (t1 - t0) * 1e3)
             return self._adjustments_cache.loc[dates_dt, instrument_ids].copy()
 
         fx_returns = self.return_calculator.calculate_returns(self._fx_prices.loc[first_idx_to_calc:]).iloc[1:]
         fx_returns = fx_returns.where(fx_returns.notna(), 0.0)
+        t2 = time.perf_counter()
 
         common_dates = fx_returns.index.intersection(missing_dates)
         if len(common_dates) == 0:
@@ -182,6 +187,7 @@ class FxSpotComponent(Component):
         fx_ret_matrix = fx_returns.loc[common_dates, common_currencies]
         weighted_fx = comp_matrix @ fx_ret_matrix.T
         result_applicable = weighted_fx.T
+        t3 = time.perf_counter()
 
         for inst_id in applicable_ids:
             trading_ccy = str(instruments[inst_id].currency)
@@ -196,6 +202,16 @@ class FxSpotComponent(Component):
             self._adjustments_cache = new_adjustments
         else:
             self._adjustments_cache = pd.concat([self._adjustments_cache, new_adjustments]).sort_index()
+        t4 = time.perf_counter()
+
+        logger.debug(
+            "FxSpotComponent cache miss [%d missing, %d inst] — "
+            "cache_check=%.1fms  fx_returns=%.1fms  matmul=%.1fms  write_cache=%.1fms  total=%.1fms",
+            len(missing_dates), len(applicable_ids),
+            (t1 - t0) * 1e3, (t2 - t1) * 1e3,
+            (t3 - t2) * 1e3, (t4 - t3) * 1e3,
+            (t4 - t0) * 1e3,
+        )
 
         result = self._adjustments_cache.loc[dates_dt, instrument_ids].copy()
         self.validate_output(result)
