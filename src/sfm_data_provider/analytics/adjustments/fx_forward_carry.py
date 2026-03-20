@@ -93,23 +93,28 @@ class FxForwardCarryComponent(Component):
         comp_matrix = comp_matrix[common_currencies]
         rate_diffs_common = rate_diffs.loc[common_dates, common_currencies]
 
-        cache = {}
-        for inst_id in applicable_ids:
-            adjustments = {}
-            for midnight_date in common_dates:
-                midnight_ts = pd.Timestamp(midnight_date)
-                yf = yf_dict[midnight_date]
-                rate_diffs_date = rate_diffs_common.loc[midnight_date]
+        # Vectorized: (n_inst × n_ccy) @ (n_ccy × n_dates) -> (n_inst × n_dates)
+        comp_np = comp_matrix.values
+        rates_np = rate_diffs_common.values  # (n_dates, n_ccy)
+        weighted_np = comp_np @ rates_np.T   # (n_inst, n_dates)
 
-                weighted_rate = (comp_matrix.loc[inst_id] * rate_diffs_date).sum()
+        ccy_index = {c: i for i, c in enumerate(common_currencies)}
+        yf_array = np.array([yf_dict[d] for d in common_dates])
 
-                trading_ccy = str(self._instruments_cache[inst_id].currency)
-                if trading_ccy != 'EUR' and trading_ccy in rate_diffs_date.index:
-                    weighted_rate -= rate_diffs_date[trading_ccy]
+        for i, inst_id in enumerate(applicable_ids):
+            trading_ccy = str(self._instruments_cache[inst_id].currency)
+            if trading_ccy != 'EUR' and trading_ccy in ccy_index:
+                weighted_np[i] -= rates_np[:, ccy_index[trading_ccy]]
 
-                adjustments[midnight_ts] = -weighted_rate * yf
+        adjustments_np = -weighted_np * yf_array  # (n_inst, n_dates)
 
-            cache[inst_id] = adjustments
+        cache = {
+            inst_id: {
+                pd.Timestamp(d): float(adjustments_np[i, j])
+                for j, d in enumerate(common_dates)
+            }
+            for i, inst_id in enumerate(applicable_ids)
+        }
 
         return cache
 
@@ -130,31 +135,39 @@ class FxForwardCarryComponent(Component):
 
         is_intraday = dates_dt and any(d.hour != 0 or d.minute != 0 for d in dates_dt)
 
-        for inst_id, adjustments in self._carry_adjustments.items():
-            if inst_id not in result.columns:
-                continue
-
-            if is_intraday:
-                # Intraday: find interval containing midnight
+        if is_intraday:
+            for inst_id, adjustments in self._carry_adjustments.items():
+                if inst_id not in result.columns:
+                    continue
                 for midnight_ts, adjustment in adjustments.items():
                     if hasattr(dates_dt, 'tz') and dates_dt.tz is not None:
                         if midnight_ts.tz is None:
                             midnight_ts = midnight_ts.tz_localize(dates_dt.tz)
                         else:
                             midnight_ts = midnight_ts.tz_convert(dates_dt.tz)
-
                     for i in range(1, len(dates_dt)):
                         t1_ts = pd.Timestamp(dates_dt[i - 1])
                         t2_ts = pd.Timestamp(dates_dt[i])
                         if t1_ts < midnight_ts <= t2_ts:
                             result.loc[dates_dt[i], inst_id] = adjustment
                             break
-            else:
-                # Daily: apply at midnight (normalized date)
-                for midnight_ts, adjustment in adjustments.items():
-                    midnight_date = midnight_ts.normalize()
-                    if midnight_date in dates_dt:
-                        result.loc[midnight_date, inst_id] = adjustment
+        else:
+            # Daily: vectorized bulk assignment instead of 800*11 scalar .loc writes
+            dates_set = set(dates_dt)
+            col_updates = {}
+            for inst_id, adjustments in self._carry_adjustments.items():
+                if inst_id not in result.columns:
+                    continue
+                values = {
+                    d: adj
+                    for midnight_ts, adj in adjustments.items()
+                    if (d := midnight_ts.normalize()) in dates_set
+                }
+                if values:
+                    col_updates[inst_id] = values
+            if col_updates:
+                tmp = pd.DataFrame(col_updates, index=dates_dt, dtype=float).fillna(0.0)
+                result[tmp.columns] = tmp
 
         return result
 
