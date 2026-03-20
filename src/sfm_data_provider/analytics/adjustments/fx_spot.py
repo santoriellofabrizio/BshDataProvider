@@ -160,7 +160,7 @@ class FxSpotComponent(Component):
         t1 = time.perf_counter()
 
         if not missing_dates:
-            logger.debug("FxSpotComponent cache hit — %.1fms", (t1 - t0) * 1e3)
+            logger.info("FxSpotComponent cache hit — %.1fms", (t1 - t0) * 1e3)
             return self._adjustments_cache.loc[dates_dt, instrument_ids].copy()
 
         fx_returns = self.return_calculator.calculate_returns(self._fx_prices.loc[first_idx_to_calc:]).iloc[1:]
@@ -204,7 +204,7 @@ class FxSpotComponent(Component):
             self._adjustments_cache = pd.concat([self._adjustments_cache, new_adjustments]).sort_index()
         t4 = time.perf_counter()
 
-        logger.debug(
+        logger.info(
             "FxSpotComponent cache miss [%d missing, %d inst] — "
             "cache_check=%.1fms  fx_returns=%.1fms  matmul=%.1fms  write_cache=%.1fms  total=%.1fms",
             len(missing_dates), len(applicable_ids),

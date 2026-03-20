@@ -140,7 +140,7 @@ class Adjuster:
             cleaned = self.return_calculator.accumulate_returns_forward(cleaned)
         t4 = time.perf_counter()
 
-        logger.debug(
+        logger.info(
             "get_clean_returns [%d dates × %d inst] — "
             "calculate_returns=%.1fms  calculate_adjustment=%.1fms  "
             "add=%.1fms  accumulate=%.1fms  total=%.1fms",
@@ -202,7 +202,7 @@ class Adjuster:
             self._update_components(timestamp, component_data, temp=True)
             t3 = time.perf_counter()
 
-            logger.debug(
+            logger.info(
                 "live_update setup — snapshot=%.1fms  prices_concat=%.1fms  update_components=%.1fms",
                 (t1 - t0) * 1e3, (t2 - t1) * 1e3, (t3 - t2) * 1e3,
             )
@@ -216,7 +216,7 @@ class Adjuster:
             for comp in self.components:
                 if id(comp) in component_states:
                     comp.restore_state(component_states[id(comp)])
-            logger.debug("live_update restore — %.1fms", (time.perf_counter() - t4) * 1e3)
+            logger.info("live_update restore — %.1fms", (time.perf_counter() - t4) * 1e3)
 
     def _update_components(self, timestamp: pd.Timestamp, component_data: dict, temp: bool = False):
         if not component_data:
