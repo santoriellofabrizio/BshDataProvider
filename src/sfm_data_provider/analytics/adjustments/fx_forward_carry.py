@@ -131,11 +131,10 @@ class FxForwardCarryComponent(Component):
             self._dates_cache = self._normalize_dates(dates)
 
         dates_dt = self._normalize_dates(dates)
-        result = pd.DataFrame(0.0, index=dates_dt, columns=list(instruments.keys()))
-
         is_intraday = dates_dt and any(d.hour != 0 or d.minute != 0 for d in dates_dt)
 
         if is_intraday:
+            result = pd.DataFrame(0.0, index=dates_dt, columns=list(instruments.keys()))
             for inst_id, adjustments in self._carry_adjustments.items():
                 if inst_id not in result.columns:
                     continue
@@ -152,18 +151,19 @@ class FxForwardCarryComponent(Component):
                             result.loc[dates_dt[i], inst_id] = adjustment
                             break
         else:
-            # Daily: build numpy array directly — avoid 800 pandas Series-from-dict
-            # creations that cost ~0.3ms each (~240ms total).
+            # Daily: build a numpy array by positional index — avoids all pandas
+            # column-label assignment overhead (~0.3ms × 800 cols = 240ms).
+            inst_list = list(instruments.keys())
+            inst_to_idx = {inst_id: i for i, inst_id in enumerate(inst_list)}
             dates_ts_list = list(pd.DatetimeIndex(dates_dt))
-            inst_ids = []
-            data_cols = []
+            result_arr = np.zeros((len(dates_ts_list), len(inst_list)), dtype=float)
             for inst_id, adjustments in self._carry_adjustments.items():
-                if inst_id not in result.columns:
+                col_idx = inst_to_idx.get(inst_id, -1)
+                if col_idx < 0:
                     continue
-                inst_ids.append(inst_id)
-                data_cols.append([adjustments.get(ts, 0.0) for ts in dates_ts_list])
-            if inst_ids:
-                result[inst_ids] = np.array(data_cols, dtype=float).T
+                for k, ts in enumerate(dates_ts_list):
+                    result_arr[k, col_idx] = adjustments.get(ts, 0.0)
+            result = pd.DataFrame(result_arr, index=dates_dt, columns=inst_list)
 
         return result
 
