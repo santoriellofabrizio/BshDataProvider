@@ -140,7 +140,7 @@ class Adjuster:
 
         if dates is not None:
             raw_returns = raw_returns.loc[dates]
-        cleaned = raw_returns.add(adjustments.reindex(raw_returns.index, columns=raw_returns.columns), fill_value=0.0)
+        cleaned = raw_returns + adjustments.reindex(raw_returns.index, columns=raw_returns.columns).fillna(0.0)
         t3 = time.perf_counter()
 
         if cumulative:
