@@ -152,22 +152,22 @@ class FxForwardCarryComponent(Component):
                             result.loc[dates_dt[i], inst_id] = adjustment
                             break
         else:
-            # Daily: vectorized bulk assignment instead of 800*11 scalar .loc writes
-            dates_set = set(dates_dt)
+            # Daily: vectorized bulk assignment.
+            # Keys in _carry_adjustments are already-normalized pd.Timestamps;
+            # avoid per-element .normalize() calls (~60µs each × 8800 = 528ms).
+            dates_ts_index = pd.DatetimeIndex(dates_dt)
+            dates_ts_set = set(dates_ts_index)
             col_updates = {}
             for inst_id, adjustments in self._carry_adjustments.items():
                 if inst_id not in result.columns:
                     continue
-                values = {
-                    d: adj
-                    for midnight_ts, adj in adjustments.items()
-                    if (d := midnight_ts.normalize()) in dates_set
-                }
+                values = {ts: adj for ts, adj in adjustments.items() if ts in dates_ts_set}
                 if values:
                     col_updates[inst_id] = values
             if col_updates:
-                tmp = pd.DataFrame(col_updates, index=dates_dt, dtype=float).fillna(0.0)
-                result[tmp.columns] = tmp
+                col_list = list(col_updates.keys())
+                tmp = pd.DataFrame(col_updates, index=dates_ts_index, dtype=float).fillna(0.0)
+                result[col_list] = tmp.values
 
         return result
 
