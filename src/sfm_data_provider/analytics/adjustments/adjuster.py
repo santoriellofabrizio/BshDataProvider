@@ -102,14 +102,21 @@ class Adjuster:
             dates = [d.date() if isinstance(d, (datetime, pd.Timestamp)) else d for d in dates]
 
         adjustments = pd.DataFrame(0.0, index=dates, columns=self.instrument_ids)
+        component_times = {}
         for component in self.components:
             try:
+                _t = time.perf_counter()
                 adjustments += component.calculate_adjustment(
                     instruments=self.instruments,
                     dates=dates
                 ).fillna(0)
+                component_times[component.__class__.__name__] = (time.perf_counter() - _t) * 1e3
             except Exception as e:
                 logger.error(f"{component.__class__.__name__} failed: {e}", exc_info=True)
+        logger.info(
+            "calculate_adjustment breakdown — %s",
+            "  ".join(f"{name}={ms:.1f}ms" for name, ms in component_times.items()),
+        )
         return adjustments.round(self.MAX_SIGNIFICANT_DIGITS)
 
     def get_clean_returns(self, dates: Optional[list] = None, cumulative: bool = False) -> pd.DataFrame:
