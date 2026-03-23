@@ -134,22 +134,40 @@ class FxForwardCarryComponent(Component):
         is_intraday = dates_dt and any(d.hour != 0 or d.minute != 0 for d in dates_dt)
 
         if is_intraday:
-            result = pd.DataFrame(0.0, index=dates_dt, columns=list(instruments.keys()))
-            for inst_id, adjustments in self._carry_adjustments.items():
-                if inst_id not in result.columns:
-                    continue
-                for midnight_ts, adjustment in adjustments.items():
-                    if hasattr(dates_dt, 'tz') and dates_dt.tz is not None:
-                        if midnight_ts.tz is None:
-                            midnight_ts = midnight_ts.tz_localize(dates_dt.tz)
-                        else:
-                            midnight_ts = midnight_ts.tz_convert(dates_dt.tz)
-                    for i in range(1, len(dates_dt)):
-                        t1_ts = pd.Timestamp(dates_dt[i - 1])
-                        t2_ts = pd.Timestamp(dates_dt[i])
-                        if t1_ts < midnight_ts <= t2_ts:
-                            result.loc[dates_dt[i], inst_id] = adjustment
-                            break
+            # Fast path: searchsorted maps each midnight to its enclosing interval in O(n log n),
+            # then a single vectorised assignment fills all instruments at once.
+            # All instruments share the same midnight key ordering (built from common_dates),
+            # so values_matrix[:, j] is the column vector for midnight j across all instruments.
+            inst_list = list(instruments.keys())
+            inst_to_idx = {iid: i for i, iid in enumerate(inst_list)}
+            result_arr = np.zeros((len(dates_dt), len(inst_list)), dtype=float)
+
+            if self._carry_adjustments:
+                dates_ns = pd.DatetimeIndex(dates_dt).asi8  # int64 ns, computed once
+
+                # All instruments share the same midnight keys — use first as sample
+                sample_adj = next(iter(self._carry_adjustments.values()))
+                midnight_ns = pd.DatetimeIndex(list(sample_adj.keys())).asi8
+
+                # searchsorted(side='left') returns i s.t. dates[i-1] < midnight <= dates[i]
+                raw_idx = np.searchsorted(dates_ns, midnight_ns, side='left')
+                valid = (raw_idx > 0) & (raw_idx < len(dates_dt))
+                valid_rows = raw_idx[valid]
+                valid_idxs = np.where(valid)[0]
+
+                if valid_rows.size > 0:
+                    applicable_ids = [iid for iid in self._carry_adjustments
+                                      if inst_to_idx.get(iid, -1) >= 0]
+                    if applicable_ids:
+                        col_arr = np.array([inst_to_idx[iid] for iid in applicable_ids])
+                        values_matrix = np.array(
+                            [list(self._carry_adjustments[iid].values()) for iid in applicable_ids],
+                            dtype=float,
+                        )  # shape: (n_applicable, n_midnight)
+                        for k, mid_idx in enumerate(valid_idxs):
+                            result_arr[valid_rows[k], col_arr] = values_matrix[:, mid_idx]
+
+            result = pd.DataFrame(result_arr, index=dates_dt, columns=inst_list)
         else:
             # Daily: build a numpy array by positional index — avoids all pandas
             # column-label assignment overhead (~0.3ms × 800 cols = 240ms).
