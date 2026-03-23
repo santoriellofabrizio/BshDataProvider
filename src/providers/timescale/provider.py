@@ -28,7 +28,7 @@ from core.utils.config_manager import ConfigManager
 from providers.timescale.fetchers.timescale_info_fetcher import TimescaleInfoFetcher
 from providers.timescale.fetchers.timescale_market_fetcher import TimescaleMarketFetcher
 from providers.timescale.query_timescale import QueryTimeScale
-from sfm_dbconnections.DbConnectionParameters import DbConnectionParameters, TimescaleConnectionParameters
+from sfm_datalibrary.connections.db_connections.DbConnectionParameters import DbConnectionParameters, TimescaleConnectionParameters
 
 from core.enums.instrument_types import InstrumentType
 from core.requests.requests import DailyRequest, BaseMarketRequest, BaseStaticRequest

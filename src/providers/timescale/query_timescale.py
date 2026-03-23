@@ -3,7 +3,7 @@ from typing import List, Optional
 import numpy as np
 import pandas as pd
 
-from sfm_dbconnections.PostgreSQLConnection import PostgreSQLConnection
+from sfm_datalibrary.connections.db_connections import PostgreSQLConnection
 
 from core.utils.memory_provider import cache_bsh_data
 

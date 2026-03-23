@@ -30,8 +30,8 @@ from core.utils.common import load_yaml
 from core.utils.config_manager import ConfigManager
 from providers.oracle.fetchers.oracle_info_fetcher import OracleInfoFetcher
 from providers.oracle.query_oracle import QueryOracle
-from sfm_dbconnections.DbConnectionParameters import DbConnectionParameters, OracleConnectionParameters
-from sfm_dbconnections.OracleConnection import OracleConnection
+from sfm_datalibrary.connections.db_connections.DbConnectionParameters import DbConnectionParameters, OracleConnectionParameters
+from sfm_datalibrary.connections.db_connections import OracleConnection
 
 logger = logging.getLogger(__name__)
 

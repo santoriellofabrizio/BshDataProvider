@@ -5,7 +5,7 @@ from typing import List, Tuple, Optional, Dict, Any, Union
 
 from dateutil.utils import today
 
-from sfm_dbconnections.OracleConnection import OracleConnection
+from sfm_datalibrary.connections.db_connections import OracleConnection
 
 from core.utils.memory_provider import cache_bsh_data
 
