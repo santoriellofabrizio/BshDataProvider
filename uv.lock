@@ -760,6 +760,7 @@ dependencies = [
     { name = "pytest-mock", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
     { name = "ruamel-yaml", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
     { name = "sfm-datalibrary", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
+    { name = "stats", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
     { name = "tqdm", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
 ]
 
@@ -770,6 +771,7 @@ requires-dist = [
     { name = "pytest-mock" },
     { name = "ruamel-yaml", specifier = ">=0.18.6" },
     { name = "sfm-datalibrary", specifier = ">=1.0.76348" },
+    { name = "stats" },
     { name = "tqdm", specifier = ">=4.64.0" },
 ]
 
@@ -816,6 +818,12 @@ sdist = { url = "https://files.pythonhosted.org/packages/94/e7/b2c673351809dca68
 wheels = [
     { url = "https://files.pythonhosted.org/packages/b7/ce/149a00dd41f10bc29e5921b496af8b574d8413afcd5e30dfa0ed46c2cc5e/six-1.17.0-py2.py3-none-any.whl", hash = "sha256:4721f391ed90541fddacab5acf947aa0d3dc7d27b2e1e8eda2be8970586c3274", size = 11050, upload-time = "2024-12-04T17:35:26.475Z" },
 ]
+
+[[package]]
+name = "stats"
+version = "0.1.2a0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/87/43/f2d8d8e2660740ecca9c0fab85a07bc02da27d1fcc5071ee481082888720/stats-0.1.2a.tar.gz", hash = "sha256:854e59fa99f92ce8319c16149ef8e9939dba3e2237bbb0fb6a6094c60155bd4c", size = 127625, upload-time = "2010-12-31T09:02:15.131Z" }
 
 [[package]]
 name = "tqdm"

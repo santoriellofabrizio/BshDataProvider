@@ -1,10 +1,13 @@
 import logging
 from abc import ABC, abstractmethod
+from contextlib import contextmanager
 from typing import Optional, List, Dict, Any
 
-from core.holidays.holiday_manager import HolidayManager
-from core.requests.requests import BaseRequest
-from providers.timescale.query_timescale import QueryTimeScale
+from tqdm import tqdm
+
+from sfm_data_provider.core.holidays.holiday_manager import HolidayManager
+from sfm_data_provider.core.requests.requests import BaseRequest
+from sfm_data_provider.providers.timescale.query_timescale import QueryTimeScale
 
 logger = logging.getLogger(__name__)
 
@@ -12,10 +15,10 @@ logger = logging.getLogger(__name__)
 class Handler(ABC):
     """
     Base handler for Chain of Responsibility pattern.
-    
+
     Handles batches of requests, processes fields it can handle,
     and forwards remaining fields to the next handler in the chain.
-    
+
     Flow:
         1. Split requests into can_handle / can't_handle
         2. Process compatible requests in batch
@@ -25,7 +28,8 @@ class Handler(ABC):
         6. Forward remaining requests to next handler
     """
 
-    def __init__(self):
+    def __init__(self, show_progress: bool = True):
+        self.show_progress = show_progress
         self._next: Optional['Handler'] = None
         self.holiday_manager = HolidayManager()
 
@@ -129,7 +133,7 @@ class Handler(ABC):
         # ============================================================
         # DETECT FORMAT
         # ============================================================
-        # Check if any top-level key matches a requested field → Format A
+        # Check if any top-level key matches a requested field -> Format A
         is_format_a = any(k.upper() in requested_fields for k in keys)
 
         # ============================================================
@@ -138,7 +142,7 @@ class Handler(ABC):
         results = {}
 
         if is_format_a:
-            # Format A: {FIELD: {subscription: value}} → {id: {field: value}}
+            # Format A: {FIELD: {subscription: value}} -> {id: {field: value}}
             for field, submap in out.items():
                 if not isinstance(submap, dict):
                     logger.warning(f"Expected dict for field '{field}', got {type(submap)}")
@@ -149,7 +153,7 @@ class Handler(ABC):
                     results.setdefault(instrument_id, {})[field.upper()] = value
 
         else:
-            # Format B: {subscription: {FIELD: value}} → {id: {field: value}}
+            # Format B: {subscription: {FIELD: value}} -> {id: {field: value}}
             for sub, fieldmap in out.items():
                 if not isinstance(fieldmap, dict):
                     logger.warning(f"Expected dict for subscription '{sub}', got {type(fieldmap)}")
@@ -166,7 +170,7 @@ class Handler(ABC):
     def _clone_request_with_fields(self, req: BaseRequest, fields: List[str]) -> BaseRequest:
         """
         Clone a request with a different set of fields.
-        
+
         This is needed when some fields are handled and others need to go downstream.
         """
         import copy
@@ -178,10 +182,10 @@ class Handler(ABC):
     def can_handle(self, req: BaseRequest) -> bool:
         """
         Check if this handler can process the given request.
-        
+
         Args:
             req: Request to check
-            
+
         Returns:
             True if this handler can process at least some fields from this request
         """
@@ -195,26 +199,26 @@ class Handler(ABC):
     ) -> Dict[str, Any]:
         """
         Process a batch of compatible requests.
-        
+
         This method should query the data source and return results.
         It does NOT need to guarantee completeness - the handle() method
         will ensure all requested fields are present (even if None).
-        
+
         Args:
             requests: List of requests this handler can process
             query: QueryTimescale instance for database access
-            
+
         Returns:
             Data in either format A or B:
-            
+
             Format A (field-centric):
                 {FIELD: {subscription: value}}
                 Example: {"MID": {"IHYG": {...}, "VUSA": {...}}}
-            
+
             Format B (subscription-centric):
                 {subscription: {FIELD: value}}
                 Example: {"IHYG": {"MID": {...}, "VOLUME": {...}}}
-            
+
         Note:
             - Return only the data you have; missing fields will be set to None
             - Either format is acceptable; normalization happens automatically
@@ -222,11 +226,41 @@ class Handler(ABC):
         """
         pass
 
+    @contextmanager
+    def progress(self, desc: str, total: Optional[int] = None):
+        """
+        Context manager for tqdm progress bars.
 
-class MarketDataHandler(Handler, ABC):
-    """
-    Abstract base class for market data handlers.
+        Args:
+            desc (str): Description for the progress bar.
+            total (int, optional): Total iterations count.
 
-    Market data handlers process time-series market data (prices, volumes, etc).
-    """
-    pass
+        Example:
+            with self.progress("Fetching EUREX", total=len(days)) as pbar:
+                for d in days:
+                    ...
+                    pbar.update(1)
+        """
+        if not self.show_progress or not total or total <= 1:
+            # Dummy bar if disabled or trivial
+            class DummyBar:
+                def update(self, *_): pass
+
+                def close(self): pass
+
+            yield DummyBar()
+            return
+
+        pbar = tqdm(
+            total=total,
+            desc=desc,
+            dynamic_ncols=True,
+            leave=True,
+            bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}]"
+        )
+        try:
+            yield pbar
+        finally:
+            pbar.close()
+
+

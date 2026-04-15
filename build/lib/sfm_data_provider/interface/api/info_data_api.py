@@ -25,7 +25,7 @@ Typical workflow:
 
 import logging
 import uuid
-from datetime import timedelta
+from datetime import timedelta, date
 from typing import Optional, Union, List, Dict, Any, Literal
 
 import pandas as pd
@@ -548,7 +548,8 @@ class InfoDataAPI(BaseAPI):
             isin: Optional[Union[str, List[str]]] = None,
             subscriptions: Optional[Union[str, List[str], Dict[str, str]]] = None,
             source: Union[str, List[str], Dict[str, str]] = "bloomberg",
-            end=today()
+            end=today(),
+            **kwargs
     ):
         """
         Restituisce i NAV storici.
@@ -565,7 +566,8 @@ class InfoDataAPI(BaseAPI):
             subscriptions=subscriptions,
             start=start,
             end=end,
-            request_type="historical"
+            request_type="historical",
+            **kwargs
         )
 
     def get_future_fields(
@@ -651,3 +653,26 @@ class InfoDataAPI(BaseAPI):
         )
         """Get stock markets info."""
         return results.drop("ISIN", axis=1, errors="ignore")
+
+
+    def get_market_trades(
+            self,
+            start: Union[date, str],
+            end: Union[date, str] = today(),
+            id: Optional[Union[str, List[str]]] = None,
+            isin: Optional[Union[str, List[str]]] = None,
+            ticker: Optional[Union[str, List[str]]] = None,
+            source: str = "timescale",
+            market: Optional[Union[str, List[str]]] = None,
+            **extra_params,
+    ):
+
+        return self.get(ticker=ticker,
+                        start=start,
+                        end=end,
+                        market=market,
+                        source=source,
+                        isin=isin,
+                        id=id,
+                        request_type="bulk",
+                        fields=["market_trades"])

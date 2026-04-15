@@ -1,10 +1,15 @@
 import os
+from collections import defaultdict
+from typing import Callable
+
 import pandas as pd
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from providers.timescale.handlers.base_handlers import Handler
-from providers.timescale.query_timescale import QueryTimeScale
+from pyparsing import results
+
 from sfm_data_provider.core.requests.requests import BulkRequest
+from sfm_data_provider.providers.timescale.handlers.base_handlers import Handler
+from sfm_data_provider.providers.timescale.query_timescale import QueryTimeScale
 
 
 class MarketTradesHandler(Handler):
@@ -15,13 +20,14 @@ class MarketTradesHandler(Handler):
         self.max_workers = min(cpu_count * 2, 10)
 
     def can_handle(self, req):
-        return req.request_type == 'BULK' and req.fields[0] == 'market_trades'
+        return req.request_type.upper() == 'BULK' and req.fields[0].upper() == 'MARKET_TRADES'
 
     # ------------------------------------------------------------------
     # HELPER METHOD
     # ------------------------------------------------------------------
 
-    def _fetch_single_day(self, query, day, subscriptions, market, segment):
+    @staticmethod
+    def _fetch_single_day(query, day, subscriptions, market, segment):
         """
         Fetch market trades for a single date.
 
@@ -75,15 +81,15 @@ class MarketTradesHandler(Handler):
         all_rows = []
 
         with self.progress(
-            f"Fetching market trades - {market} (parallel: {workers} workers)",
-            len(business_days)
+                f"Fetching market trades - {market} (parallel: {workers} workers)",
+                len(business_days)
         ) as pbar:
 
             with ThreadPoolExecutor(max_workers=workers) as executor:
                 future_to_date = {
                     executor.submit(
                         self._fetch_single_day,
-                        query, day, subscriptions, market, segment
+                        query, day, [s(day) if isinstance(s, Callable) else s for s in subscriptions], market, segment
                     ): day
                     for day in business_days
                 }
@@ -98,5 +104,10 @@ class MarketTradesHandler(Handler):
             return {}
 
         df = pd.concat(all_rows, ignore_index=True, copy=False)
+        results = defaultdict(dict)
 
-        return df
+        for instrument_id, isin in zip(ids, subscriptions):
+            mask = (df["isin"] == isin)
+            results[instrument_id]['MARKET_TRADES'] = df.loc[mask].to_dict('records')
+
+        return results

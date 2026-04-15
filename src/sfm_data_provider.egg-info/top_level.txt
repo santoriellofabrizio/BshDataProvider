@@ -1,8 +1,1 @@
-__init__
-analytics
-cache
-client
-core
-interface
-providers
 sfm_data_provider

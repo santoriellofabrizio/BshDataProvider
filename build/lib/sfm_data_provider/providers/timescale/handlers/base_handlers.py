@@ -15,10 +15,10 @@ logger = logging.getLogger(__name__)
 class Handler(ABC):
     """
     Base handler for Chain of Responsibility pattern.
-    
+
     Handles batches of requests, processes fields it can handle,
     and forwards remaining fields to the next handler in the chain.
-    
+
     Flow:
         1. Split requests into can_handle / can't_handle
         2. Process compatible requests in batch
@@ -170,7 +170,7 @@ class Handler(ABC):
     def _clone_request_with_fields(self, req: BaseRequest, fields: List[str]) -> BaseRequest:
         """
         Clone a request with a different set of fields.
-        
+
         This is needed when some fields are handled and others need to go downstream.
         """
         import copy
@@ -182,10 +182,10 @@ class Handler(ABC):
     def can_handle(self, req: BaseRequest) -> bool:
         """
         Check if this handler can process the given request.
-        
+
         Args:
             req: Request to check
-            
+
         Returns:
             True if this handler can process at least some fields from this request
         """
@@ -199,26 +199,26 @@ class Handler(ABC):
     ) -> Dict[str, Any]:
         """
         Process a batch of compatible requests.
-        
+
         This method should query the data source and return results.
         It does NOT need to guarantee completeness - the handle() method
         will ensure all requested fields are present (even if None).
-        
+
         Args:
             requests: List of requests this handler can process
             query: QueryTimescale instance for database access
-            
+
         Returns:
             Data in either format A or B:
-            
+
             Format A (field-centric):
                 {FIELD: {subscription: value}}
                 Example: {"MID": {"IHYG": {...}, "VUSA": {...}}}
-            
+
             Format B (subscription-centric):
                 {subscription: {FIELD: value}}
                 Example: {"IHYG": {"MID": {...}, "VOLUME": {...}}}
-            
+
         Note:
             - Return only the data you have; missing fields will be set to None
             - Either format is acceptable; normalization happens automatically

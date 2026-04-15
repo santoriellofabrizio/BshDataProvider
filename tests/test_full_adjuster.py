@@ -1,31 +1,31 @@
+import numpy as np
+import pandas as pd
 from datetime import time, date
-
 from matplotlib import pyplot as plt
 
+# Import dai tuoi moduli specifici
 from sfm_data_provider.analytics.adjustments.dividend import DividendComponent
-
 from sfm_data_provider.analytics.adjustments.fx_forward_carry import FxForwardCarryComponent
-
 from sfm_data_provider.analytics.adjustments.fx_spot import FxSpotComponent
-
 from sfm_data_provider.analytics.adjustments.ter import TerComponent
-
 from sfm_data_provider.analytics.adjustments.adjuster import Adjuster
 from sfm_data_provider.interface.bshdata import BshData
 
 
 def full_test():
-    # 1. Setup Iniziale
-    ticker = ['IUSA', 'IUSE']  # Usiamo una lista pulita
+    # --- 1. SETUP INIZIALE ---
+    # IUSA (S&P 500 UCITS ETF USD) vs IUSE (S&P 500 EUR Hedged)
+    ticker = ['IUSA', 'IUSE']
     currencies = ['USD']
-    start_date = '2026-01-10'
+    start_date = '2025-09-10'
     end_date = '2026-03-01'
     ref_date = date(2026, 3, 2)
 
-    api = BshData(r'C:\AFMachineLearning\Libraries\SFMDataProvider\config\bshdata_config.yaml')
+    # Inizializzazione API con config locale
+    config_path = r'C:\AFMachineLearning\Libraries\SFMDataProvider\config\bshdata_config.yaml'
+    api = BshData(config_path)
 
-    # 2. Recupero Dati (Info & Static)
-    # Completamento della riga 'ter = g' interrotta
+    # --- 2. RECUPERO DATI ANAGRAFICI E COSTI ---
     ter = api.info.get_ter(ticker=ticker) / 100
 
     fx_composition = api.info.get_fx_composition(
@@ -35,21 +35,29 @@ def full_test():
         ticker=ticker, fx_fxfwrd="fxfwrd", reference_date=ref_date
     )
 
-    # 3. Recupero Dati di Mercato (Daily)
+    # --- 3. RECUPERO DATI DI MERCATO (DAILY) ---
+    # Usiamo lo stesso snapshot_time per ETF e Cambi per minimizzare il rumore
+    snap = time(16)
+
     prices = api.market.get_daily_etf(
-        ticker=ticker, start=start_date, end=end_date, snapshot_time=time(16)
+        ticker=ticker, start=start_date, end=end_date, snapshot_time=snap
     )
+
     fx_prices = api.market.get_daily_currency(
-        ticker=[f"EUR{c}" for c in currencies], start=start_date, end=end_date, snapshot_time=time(16)
+        ticker=[f"EUR{c}" for c in currencies], start=start_date, end=end_date, snapshot_time=snap
+    ).to_frame(name="EURUSD")
+
+    fx_forward_prices = api.market.get_daily_fx_forward(
+        base_currency='EUR',
+        quoted_currency=fx_forward_info.columns.tolist(),
+        start=start_date,
+        end=end_date
     )
-    fx_forward_prices = api.market.get_daily_fx_forward(base_currency='EUR',
-                                                        quoted_currency=fx_forward_info.columns.tolist(),
-                                                        start=start_date, end=end_date
-                                                        )
+
     dividends = api.info.get_dividends(ticker=ticker, start=start_date)
 
-    # 4. Inizializzazione Adjuster (Logica della classe)
-    # Questa parte applica le componenti di costo/cambio ai prezzi base
+    # --- 4. COSTRUZIONE DELL'ADJUSTER ---
+    # Applichiamo le componenti per "pulire" i rendimenti dai fattori esterni
     adjuster = (
         Adjuster(prices)
         .add(TerComponent(ter))
@@ -58,55 +66,60 @@ def full_test():
         .add(DividendComponent(dividends, prices, fx_prices=fx_prices))
     )
 
-    # 5. Output dei risultati
-    adjusted_returns_BP = adjuster.get_clean_returns()
-    adjusted_returns_BP.plot(kind='bar', title='clean_returns')
-    (1 + adjusted_returns_BP).cumprod(axis=1).plot(title='rebased_prices')
+    # --- 5. ANALISI DEI RENDIMENTI (ALPHA & BETA) ---
+    clean_returns = adjuster.get_clean_returns().dropna() * 10000
+    debug = adjuster.get_breakdown()
 
-    plt.show()
+    for name, val in debug.items():
+        val.plot(kind='bar', title=name)
+        plt.show()
 
-    print("Prezzi Originali (Prime righe):")
-    print(prices.head())
-    print("\nPrezzi Rettificati (TER + FX + Dividendi):")
-    print(adjusted_returns_BP.head())
-    # 5. Calcolo dei Rendimenti Puliti
-    # get_clean_returns() dovrebbe restituire i rendimenti logaritmici o percentuali
-    clean_returns = adjuster.get_clean_returns().dropna()
+    # X = IUSA (Benchmark), Y = IUSE (Test)
+    x = clean_returns['IUSA'].values
+    y = clean_returns['IUSE'].values
 
-    # Assumiamo di confrontare IUSA (Ticker A) vs IUSE (Ticker B)
-    y = clean_returns['IUSE']
-    x = clean_returns['IUSA']
+    # Calcolo manuale con NumPy (Minimi Quadrati)
+    # Beta = Cov(x,y) / Var(x)
+    matrix = np.cov(x, y)
+    beta = matrix[0, 1] / matrix[0, 0]
 
-    # 6. Regressione Lineare per Alpha e Beta
-    slope, intercept, r_value, p_value, std_err = stats.linregress(x, y)
+    # Alpha = Media(y) - Beta * Media(x)
+    alpha_daily = np.mean(y) - beta * np.mean(x)
+    alpha_annualized = alpha_daily * 252
 
-    # Alpha annualizzato (assumendo rendimenti giornalieri e 252 giorni lavorativi)
-    annualized_alpha = intercept * 252
+    # R-squared (coefficiente di determinazione)
+    correlation_matrix = np.corrcoef(x, y)
+    r_squared = correlation_matrix[0, 1] ** 2
 
-    print("-" * 30)
-    print(f"RISULTATI ANALISI REGRESSIONE:")
-    print(f"Beta (Slope): {slope:.4f}  <-- Target: ~1.0")
-    print(f"Alpha (Intercept): {intercept:.6f}")
-    print(f"Alpha Annualizzato: {annualized_alpha:.4f} <-- Target: ~0.0")
-    print(f"R-squared: {r_value ** 2:.4f}")
-    print("-" * 30)
+    # --- 6. OUTPUT RISULTATI ---
+    print("\n" + "=" * 40)
+    print("TEST RISULTATI: IUSA vs IUSE (Adjusted)")
+    print("=" * 40)
+    print(f"BETA:         {beta:.4f}  (Aspettativa: ~1.0)")
+    print(f"ALPHA (Ann.): {alpha_annualized:.6f}  (Aspettativa: ~0.0)")
+    print(f"R-SQUARED:    {r_squared:.4f}  (Aspettativa: >0.98)")
+    print("=" * 40)
 
-    # 7. Visualizzazione Comparativa
-    fig, ax = plt.subplots(2, 1, figsize=(10, 10))
+    # --- 7. VISUALIZZAZIONE ---
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 10))
 
-    # Plot 1: Rendimenti Cumulati Sovrapposti (Performance Relativa)
-    (1 + clean_returns).cumprod().plot(ax=ax[0], title='Performance Cumulata Pulita (Base 1)')
-    ax[0].set_ylabel('Rendimento Cumulato')
-    ax[0].grid(True)
+    # Plot 1: Performance Cumulata
+    cumulative_ret = (1 + clean_returns).cumprod()
+    cumulative_ret.plot(ax=ax1, title='Confronto Performance Cumulata Rettificata')
+    ax1.set_ylabel('Valore Rebased (1.0)')
+    ax1.grid(True, linestyle='--', alpha=0.7)
 
-    # Plot 2: Scatter Plot con Linea di Regressione
-    ax[1].scatter(x, y, alpha=0.5, label='Rendimenti Giornalieri')
-    ax[1].plot(x, intercept + slope * x, 'r', label=f'Regressione (Beta={slope:.2f})')
-    ax[1].set_title('Scatter Plot: IUSA vs IUSE')
-    ax[1].set_xlabel('Rendimenti IUSA')
-    ax[1].set_ylabel('Rendimenti IUSE')
-    ax[1].legend()
-    ax[1].grid(True)
+    # Plot 2: Scatter Plot della Regressione
+    ax2.scatter(x, y, alpha=0.5, color='blue', label='Rendimenti Giornalieri')
+    # Linea di regressione: y = a + bx
+    regression_line = alpha_daily + beta * x
+    ax2.plot(x, regression_line, color='red', lw=2, label=f'Fit: Beta={beta:.3f}')
+
+    ax2.set_title('Analisi di Regressione: IUSA vs IUSE')
+    ax2.set_xlabel('Rendimenti IUSA (Clean)')
+    ax2.set_ylabel('Rendimenti IUSE (Clean)')
+    ax2.legend()
+    ax2.grid(True, linestyle='--', alpha=0.7)
 
     plt.tight_layout()
     plt.show()

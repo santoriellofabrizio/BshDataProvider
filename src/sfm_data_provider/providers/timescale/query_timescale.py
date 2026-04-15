@@ -443,17 +443,19 @@ class QueryTimeScale:
         date_start = date.strftime("%Y-%m-%d")
         date_end = (date + dt.timedelta(days=1)).strftime("%Y-%m-%d")
         isins_list = "'" + "', '".join(array_isin) + "'"
-        query = f'''select a.isin, a."desc", a.classe, a.mercato_desc, a.segmento, a.divisa, a.moltiplicatore, 
+        segment_clause = f"AND a.segmento = '{segment}'" if segment else ""
+
+        query = f'''SELECT a.isin, a."desc", a.classe, a.mercato_desc, a.segmento, a.divisa, a.moltiplicatore, 
                         sum(abs(m.qty)) as Qty, sum(abs(m.qty) * m.price * a.moltiplicatore) as Ctv, 
                         count(m.id_strumento) as Nop
-                    from anatit a, market_trades m
-                    where a.id_strumento = m.id_strumento 
-                      and a.isin in ({isins_list}) 
-                      and a.cache_provenienza = '{market}'
-                      f"AND a.segmento = '{segment}'" if segment else ""
-                      and m.datetime >= '{date_start}' 
-                      and m.datetime < '{date_end}'
-                    group by a.isin, a."desc", a.classe, a.mercato_desc, a.segmento, a.divisa, a.moltiplicatore'''
+                    FROM anatit a, market_trades m
+                    WHERE a.id_strumento = m.id_strumento 
+                      AND a.isin in ({isins_list}) 
+                      AND a.cache_provenienza = '{market}'
+                      {segment_clause}
+                      AND m.datetime >= '{date_start}' 
+                      AND m.datetime < '{date_end}'
+                    GROUP BY a.isin, a."desc", a.classe, a.mercato_desc, a.segmento, a.divisa, a.moltiplicatore'''
         return self._get_results(query, date_=date, market=market)
 
     @cache_bsh_data

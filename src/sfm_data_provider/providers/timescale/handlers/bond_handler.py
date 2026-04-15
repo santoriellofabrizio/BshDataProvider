@@ -1,4 +1,4 @@
-from providers.timescale.handlers.base_handlers import Handler
+from sfm_data_provider.providers.timescale.handlers.base_handlers import Handler
 
 class BondHandler(Handler):
     def can_handle(self, req):

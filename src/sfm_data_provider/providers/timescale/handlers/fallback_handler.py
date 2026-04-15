@@ -1,7 +1,7 @@
 import logging
 
 
-from providers.timescale.handlers.base_handlers import Handler
+from sfm_data_provider.providers.timescale.handlers.base_handlers import Handler
 logger = logging.getLogger(__name__)
 
 

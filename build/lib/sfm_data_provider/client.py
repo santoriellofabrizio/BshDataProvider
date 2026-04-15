@@ -62,13 +62,6 @@ class BSHDataClient(Singleton):
         }
         self._tracker = RequestTracker()
 
-    # @staticmethod
-    # def _init_lazy_provider(key: str, factory, cfg: dict):
-    #     """Inizializzazione lazy: torna None se disattivato."""
-    #     if not cfg.get(f"activate_{key}", True):
-    #         return None
-    #     return LazyProviderProxy(factory)
-
     @staticmethod
     def _init_lazy_provider(key: str, factory, client_config):
         """Inizializzazione lazy: ritorna None se disattivato."""

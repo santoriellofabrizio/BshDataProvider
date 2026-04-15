@@ -154,8 +154,7 @@ class BaseMarketRequest(BaseRequest):
         # --- Frequency ---
         if isinstance(self.frequency, str):
             self.frequency = Frequency.from_str(self.frequency)
-        elif not isinstance(self.frequency, Frequency):
-            raise TypeError("frequency must be a str or Frequency enum")
+
 
         # --- Garantisce dict ---
         self.extra_params = self.extra_params or {}

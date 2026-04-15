@@ -24,7 +24,7 @@ class FXHandler(Handler):
         fields = first.fields if isinstance(first.fields, list) else [first.fields]
 
         # ======================================================================
-        # DAILY -> ciclo sulle date, concat, normalize, build_results
+        # DAILY → ciclo sulle date, concat, normalize, build_results
         # ======================================================================
         if is_daily:
             days = self.holiday_manager.get_business_days(first.start, first.end, "FX")
@@ -63,7 +63,7 @@ class FXHandler(Handler):
             )
 
         # ======================================================================
-        # INTRADAY -> ciclo sulle date, concat, normalize, build_results
+        # INTRADAY → ciclo sulle date, concat, normalize, build_results
         # ======================================================================
         sec = _freq_to_seconds(first.frequency)
         days = pd.date_range(first.start, first.end, freq="D")

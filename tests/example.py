@@ -1,5 +1,5 @@
 from sfm_data_provider.interface.bshdata import BshData
 
-api = BshData().market
+api = BshData(r"C:\AFMachineLearning\Libraries\SFMDataProvider\config\bshdata_config.yaml")
 
-api.get_daily_currency(start="2025-12-12", id="EURPKR")
+api.info.get_nav(start="2026-03-12", ticker='IHYG', source='bloomberg', fallbacks=[{'source':'bloomberg'}])

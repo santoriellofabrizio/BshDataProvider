@@ -4,6 +4,7 @@ Adjuster: orchestrate components, manage state, delegate cache to components.
 from contextlib import contextmanager
 from datetime import date, datetime
 from typing import Dict, Optional, Literal, Union
+import time
 import pandas as pd
 import logging
 
@@ -101,14 +102,21 @@ class Adjuster:
             dates = [d.date() if isinstance(d, (datetime, pd.Timestamp)) else d for d in dates]
 
         adjustments = pd.DataFrame(0.0, index=dates, columns=self.instrument_ids)
+        component_times = {}
         for component in self.components:
             try:
+                _t = time.perf_counter()
                 adjustments += component.calculate_adjustment(
                     instruments=self.instruments,
                     dates=dates
                 ).fillna(0)
+                component_times[component.__class__.__name__] = (time.perf_counter() - _t) * 1e3
             except Exception as e:
                 logger.error(f"{component.__class__.__name__} failed: {e}", exc_info=True)
+        logger.info(
+            "calculate_adjustment breakdown — %s",
+            "  ".join(f"{name}={ms:.1f}ms" for name, ms in component_times.items()),
+        )
         return adjustments.round(self.MAX_SIGNIFICANT_DIGITS)
 
     def get_clean_returns(self, dates: Optional[list] = None, cumulative: bool = False) -> pd.DataFrame:
@@ -122,13 +130,32 @@ class Adjuster:
         Returns:
             DataFrame with clean returns (cumulated or not)
         """
+        t0 = time.perf_counter()
+
         raw_returns = self.return_calculator.calculate_returns(self._prices)
-        adjustments = self.calculate_adjustment(dates).iloc[::-1]
+        t1 = time.perf_counter()
+
+        adjustments = self.calculate_adjustment(dates)
+        t2 = time.perf_counter()
+
         if dates is not None:
             raw_returns = raw_returns.loc[dates]
-        cleaned = raw_returns.add(adjustments.reindex(raw_returns.index, columns=raw_returns.columns), fill_value=0.0)
+        cleaned = raw_returns + adjustments.reindex(raw_returns.index, columns=raw_returns.columns).fillna(0.0)
+        t3 = time.perf_counter()
+
         if cumulative:
             cleaned = self.return_calculator.accumulate_returns_forward(cleaned)
+        t4 = time.perf_counter()
+
+        logger.info(
+            "get_clean_returns [%d dates × %d inst] — "
+            "calculate_returns=%.1fms  calculate_adjustment=%.1fms  "
+            "add=%.1fms  accumulate=%.1fms  total=%.1fms",
+            len(self._prices), len(self.instrument_ids),
+            (t1 - t0) * 1e3, (t2 - t1) * 1e3,
+            (t3 - t2) * 1e3, (t4 - t3) * 1e3,
+            (t4 - t0) * 1e3,
+        )
         return cleaned
 
     def append_update(self, timestamp: pd.Timestamp = None,
@@ -165,26 +192,38 @@ class Adjuster:
         Yields:
             Self (Adjuster) to allow method calls within the context
         """
+        t0 = time.perf_counter()
         timestamp = pd.Timestamp.now() if self.intraday else pd.Timestamp.now().normalize()
         prices = add_time_tag(prices, timestamp)
-        # Save current state
-        snapshot = (self._prices.copy(), {id(c): c.save_state() for c in self.components if c.is_updatable()})
+        # Save current state: store length instead of copying the full DataFrame
+        prices_len = len(self._prices)
+        component_states = {id(c): c.save_state() for c in self.components if c.is_updatable()}
+        t1 = time.perf_counter()
 
         try:
             if prices is not None: # Apply temporary updates
                 prices = self._prepare_new_prices(prices)
                 self._prices = pd.concat([self._prices, prices]).drop_duplicates().sort_index()
+            t2 = time.perf_counter()
 
             self._update_components(timestamp, component_data, temp=True)
+            t3 = time.perf_counter()
+
+            logger.info(
+                "live_update setup — snapshot=%.1fms  prices_concat=%.1fms  update_components=%.1fms",
+                (t1 - t0) * 1e3, (t2 - t1) * 1e3, (t3 - t2) * 1e3,
+            )
 
             yield self
 
         finally:
-            # Restore state
-            self._prices, component_states = snapshot
+            t4 = time.perf_counter()
+            # Restore state: truncate instead of restoring a full copy
+            self._prices = self._prices.iloc[:prices_len]
             for comp in self.components:
                 if id(comp) in component_states:
                     comp.restore_state(component_states[id(comp)])
+            logger.info("live_update restore — %.1fms", (time.perf_counter() - t4) * 1e3)
 
     def _update_components(self, timestamp: pd.Timestamp, component_data: dict, temp: bool = False):
         if not component_data:

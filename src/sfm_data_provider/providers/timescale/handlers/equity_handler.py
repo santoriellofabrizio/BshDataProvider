@@ -22,7 +22,7 @@ class EquityHandler(Handler):
 
     def can_handle(self, req):
         t = req.instrument.type.upper()
-        return t in ("ETP", "STOCK")
+        return t in ("ETP", "STOCK") and req.request_type
 
     # ------------------------------------------------------------------
     # HELPER METHODS PER PARALLELIZZAZIONE

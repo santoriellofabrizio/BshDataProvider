@@ -14,3 +14,8 @@ cache_dir/
 *.log
 *.txt
 .env
+build
+__pycache__/
+*.pyc
+*.parquet
+cache/joblib/

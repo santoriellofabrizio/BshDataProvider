@@ -1,10 +1,10 @@
 from typing import List, Any, Dict
 
-from core.enums.instrument_types import InstrumentType
-from core.holidays.holiday_manager import HolidayManager
-from core.requests.requests import BaseStaticRequest
-from providers.timescale.handlers.base_handlers import Handler
-from providers.timescale.query_timescale import QueryTimeScale
+from sfm_data_provider.core.enums.instrument_types import InstrumentType
+from sfm_data_provider.core.holidays.holiday_manager import HolidayManager
+from sfm_data_provider.core.requests.requests import BaseStaticRequest
+from sfm_data_provider.providers.timescale.handlers.base_handlers import Handler
+from sfm_data_provider.providers.timescale.query_timescale import QueryTimeScale
 
 
 class YTMHandler(Handler):

@@ -23,6 +23,7 @@ from sfm_data_provider.providers.timescale.handlers.fx_handler import FXHandler
 from sfm_data_provider.providers.timescale.handlers.fxfwrd_handler import FXFwdHandler
 from sfm_data_provider.providers.timescale.handlers.general_handler import GeneralInfoHandler
 from sfm_data_provider.providers.timescale.handlers.index_handler import IndexHandler
+from sfm_data_provider.providers.timescale.handlers.market_trades_handler import MarketTradesHandler
 from sfm_data_provider.providers.timescale.handlers.ytm_handler import YTMHandler
 from sfm_data_provider.providers.timescale.query_timescale import QueryTimeScale
 
@@ -61,7 +62,8 @@ class TimescaleFetcher(BaseFetcher):
         self.market_chain = market_chain
 
         # Build info data handler chain
-        self.info_chain = YTMHandler()
+        self.info_chain = YTMHandler() \
+                          .set_next(MarketTradesHandler())
 
         self.general_chain = GeneralInfoHandler()
 

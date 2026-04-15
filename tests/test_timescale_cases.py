@@ -8,7 +8,7 @@ from sfm_data_provider.interface.bshdata import BshData
 @pytest.fixture(scope="module")
 def api():
     """Shared BSH API interface."""
-    return BshData(config_path="config/bshdata_config.yaml", log_level="ERROR")
+    return BshData(config_path=r"C:\AFMachineLearning\Libraries\SFMDataProvider\config\bshdata_config.yaml", log_level="DEBUG")
 
 
 @pytest.fixture
@@ -47,16 +47,24 @@ def test_timescale_intraday_best_sampled(api, sample_isins):
     assert res is not None
     assert not res.empty, "Expected non-empty is_intraday DataFrame"
 
+
+def test_trades(api, sample_isins):
+    res = api.info.get_market_trades(start="2026-01-20", isin=sample_isins[:10], market='ETFP')
+    print(res.head())
+    assert res is not None
+    assert not res.empty, "Expected non-empty is_intraday DataFrame"
+
+
 def test_timescale_multi_intraday_best_sampled(api, sample_isins):
     """Single is_intraday ETF request (1m best sampled)."""
     res = api.market.get_intraday_etf(
         isin=sample_isins[:10],
-        start="2026-01-20",
-        end="2026-02-06",
+        start="2026-03-20",
         frequency="1m",
         fields="mid",
         market="EURONEXT",
         source="timescale",
+        fallbacks=[{'source': 'bloomberg', 'market': mkt} for mkt in ["IM","FP","NA"]]
     )
     print(res.head())
     assert res is not None

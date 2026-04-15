@@ -1,10 +1,11 @@
 import logging
+from weakref import finalize
 
 import pandas as pd
 
 
 def _freq_to_seconds(freq: str) -> int:
-    # es: "5m" -> 300
+    # es: "5m" → 300
     freq = freq.lower()
     if freq.endswith("m"):
         return int(freq[:-1]) * 60
@@ -52,51 +53,6 @@ def _normalize_dataframe(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def _slice_by_date_range(series: pd.Series, start, end) -> pd.Series:
-    """
-    Slice a Series by date range, handling both daily and is_intraday indices.
-
-    Works with:
-    - Daily index + daily bounds
-    - Intraday index + daily bounds
-    - Intraday index + is_intraday bounds
-    - Mixed scenarios
-
-    Args:
-        series: Series with DatetimeIndex
-        start: Start bound (date, datetime, Timestamp, or None)
-        end: End bound (date, datetime, Timestamp, or None)
-
-    Returns:
-        Sliced Series
-    """
-    if series.empty:
-        return series
-
-    # Handle None bounds
-    if start is None and end is None:
-        return series
-
-    # Convert bounds to Timestamp for consistent comparison
-    start_ts = pd.Timestamp(start) if start is not None else None
-    end_ts = pd.Timestamp(end) if end is not None else None
-
-    # If end is date-only (midnight), extend to end-of-day
-    # This ensures is_intraday data for that date is included
-    if end_ts is not None and end_ts == end_ts.normalize():
-        end_ts = end_ts + pd.Timedelta(days=1) - pd.Timedelta(nanoseconds=1)
-
-    # Build boolean mask
-    if start_ts is not None and end_ts is not None:
-        mask = (series.index >= start_ts) & (series.index <= end_ts)
-    elif start_ts is not None:
-        mask = series.index >= start_ts
-    else:
-        mask = series.index <= end_ts
-
-    return series[mask]
-
-
 def _build_results(
         df: pd.DataFrame,
         requests: list,
@@ -122,7 +78,7 @@ def _build_results(
     df = _ensure_columns_are_upper(df)
     results: dict[str, dict[str, dict]] = {}
 
-    # ref_index SOLO per daily (per is_intraday non serve!)
+    # ✅ ref_index SOLO per daily (per intraday non serve!)
     ref_index = pd.DatetimeIndex(business_days) if is_daily else None
 
     # Cicla ogni request (instrument)
@@ -143,10 +99,10 @@ def _build_results(
                     results[req.instrument.id] = {f: {} for f in fields}
                 continue
 
-            # Costruisce l'indice temporale come DatetimeIndex
+            # ✅ Costruisce l'indice temporale come DatetimeIndex
             idx = pd.to_datetime(sub_df["DATE"] if is_daily else sub_df["TIMESTAMP"])
 
-            # Crea dizionario field -> {timestamp: valore}
+            # Crea dizionario field → {timestamp: valore}
             if is_daily:
                 # Daily: reindex su business_days per garantire date complete
                 results[req.instrument.id] = {
@@ -154,23 +110,21 @@ def _build_results(
                         pd.Series(sub_df[f].values, index=idx)
                         .groupby(level=0)
                         .mean()
-                        .reindex(ref_index)
+                        .reindex(ref_index)  # ✅ Ora funziona! Entrambi DatetimeIndex
                         .to_dict()
                     )
                     for f in fields
                     if f in sub_df.columns
                 }
             else:
-                # Intraday: usa _slice_by_date_range per gestire bounds robusti
+                # Intraday: usa SOLO i timestamp effettivi dai dati (NO reindex!)
                 results[req.instrument.id] = {
                     f: (
-                        _slice_by_date_range(
-                            pd.Series(sub_df[f].values, index=idx),
-                            fstart,
-                            fend
-                        )
+                        pd.Series(sub_df[f].values, index=idx)
+                        .loc[fstart:fend]
                         .groupby(level=0)
                         .mean()
+                        # ❌ NO .reindex() per intraday! Mantieni solo timestamp reali
                         .to_dict()
                     )
                     for f in fields

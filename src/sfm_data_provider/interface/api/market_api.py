@@ -541,6 +541,8 @@ class MarketDataAPI(BaseAPI):
             **extra_params,
     ):
         """Dati is_intraday per ETF (ETP su ETFP di default). wraps get_intraday."""
+        if not end:
+            end = dt.date.today()
         return self.get_intraday(
             start=start,
             end=end,
@@ -966,3 +968,5 @@ class MarketDataAPI(BaseAPI):
             pass
         finally:
             return df
+
+

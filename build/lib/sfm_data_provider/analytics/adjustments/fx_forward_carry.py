@@ -93,23 +93,28 @@ class FxForwardCarryComponent(Component):
         comp_matrix = comp_matrix[common_currencies]
         rate_diffs_common = rate_diffs.loc[common_dates, common_currencies]
 
-        cache = {}
-        for inst_id in applicable_ids:
-            adjustments = {}
-            for midnight_date in common_dates:
-                midnight_ts = pd.Timestamp(midnight_date)
-                yf = yf_dict[midnight_date]
-                rate_diffs_date = rate_diffs_common.loc[midnight_date]
+        # Vectorized: (n_inst × n_ccy) @ (n_ccy × n_dates) -> (n_inst × n_dates)
+        comp_np = comp_matrix.values
+        rates_np = rate_diffs_common.values  # (n_dates, n_ccy)
+        weighted_np = comp_np @ rates_np.T   # (n_inst, n_dates)
 
-                weighted_rate = (comp_matrix.loc[inst_id] * rate_diffs_date).sum()
+        ccy_index = {c: i for i, c in enumerate(common_currencies)}
+        yf_array = np.array([yf_dict[d] for d in common_dates])
 
-                trading_ccy = str(self._instruments_cache[inst_id].currency)
-                if trading_ccy != 'EUR' and trading_ccy in rate_diffs_date.index:
-                    weighted_rate -= rate_diffs_date[trading_ccy]
+        for i, inst_id in enumerate(applicable_ids):
+            trading_ccy = str(self._instruments_cache[inst_id].currency)
+            if trading_ccy != 'EUR' and trading_ccy in ccy_index:
+                weighted_np[i] -= rates_np[:, ccy_index[trading_ccy]]
 
-                adjustments[midnight_ts] = -weighted_rate * yf
+        adjustments_np = -weighted_np * yf_array  # (n_inst, n_dates)
 
-            cache[inst_id] = adjustments
+        cache = {
+            inst_id: {
+                pd.Timestamp(d): float(adjustments_np[i, j])
+                for j, d in enumerate(common_dates)
+            }
+            for i, inst_id in enumerate(applicable_ids)
+        }
 
         return cache
 
@@ -126,35 +131,57 @@ class FxForwardCarryComponent(Component):
             self._dates_cache = self._normalize_dates(dates)
 
         dates_dt = self._normalize_dates(dates)
-        result = pd.DataFrame(0.0, index=dates_dt, columns=list(instruments.keys()))
-
         is_intraday = dates_dt and any(d.hour != 0 or d.minute != 0 for d in dates_dt)
 
-        for inst_id, adjustments in self._carry_adjustments.items():
-            if inst_id not in result.columns:
-                continue
+        if is_intraday:
+            # Fast path: searchsorted maps each midnight to its enclosing interval in O(n log n),
+            # then a single vectorised assignment fills all instruments at once.
+            # All instruments share the same midnight key ordering (built from common_dates),
+            # so values_matrix[:, j] is the column vector for midnight j across all instruments.
+            inst_list = list(instruments.keys())
+            inst_to_idx = {iid: i for i, iid in enumerate(inst_list)}
+            result_arr = np.zeros((len(dates_dt), len(inst_list)), dtype=float)
 
-            if is_intraday:
-                # Intraday: find interval containing midnight
-                for midnight_ts, adjustment in adjustments.items():
-                    if hasattr(dates_dt, 'tz') and dates_dt.tz is not None:
-                        if midnight_ts.tz is None:
-                            midnight_ts = midnight_ts.tz_localize(dates_dt.tz)
-                        else:
-                            midnight_ts = midnight_ts.tz_convert(dates_dt.tz)
+            if self._carry_adjustments:
+                dates_ns = pd.DatetimeIndex(dates_dt).asi8  # int64 ns, computed once
 
-                    for i in range(1, len(dates_dt)):
-                        t1_ts = pd.Timestamp(dates_dt[i - 1])
-                        t2_ts = pd.Timestamp(dates_dt[i])
-                        if t1_ts < midnight_ts <= t2_ts:
-                            result.loc[dates_dt[i], inst_id] = adjustment
-                            break
-            else:
-                # Daily: apply at midnight (normalized date)
-                for midnight_ts, adjustment in adjustments.items():
-                    midnight_date = midnight_ts.normalize()
-                    if midnight_date in dates_dt:
-                        result.loc[midnight_date, inst_id] = adjustment
+                # All instruments share the same midnight keys — use first as sample
+                sample_adj = next(iter(self._carry_adjustments.values()))
+                midnight_ns = pd.DatetimeIndex(list(sample_adj.keys())).asi8
+
+                # searchsorted(side='left') returns i s.t. dates[i-1] < midnight <= dates[i]
+                raw_idx = np.searchsorted(dates_ns, midnight_ns, side='left')
+                valid = (raw_idx > 0) & (raw_idx < len(dates_dt))
+                valid_rows = raw_idx[valid]
+                valid_idxs = np.where(valid)[0]
+
+                if valid_rows.size > 0:
+                    applicable_ids = [iid for iid in self._carry_adjustments
+                                      if inst_to_idx.get(iid, -1) >= 0]
+                    if applicable_ids:
+                        col_arr = np.array([inst_to_idx[iid] for iid in applicable_ids])
+                        values_matrix = np.array(
+                            [list(self._carry_adjustments[iid].values()) for iid in applicable_ids],
+                            dtype=float,
+                        )  # shape: (n_applicable, n_midnight)
+                        for k, mid_idx in enumerate(valid_idxs):
+                            result_arr[valid_rows[k], col_arr] = values_matrix[:, mid_idx]
+
+            result = pd.DataFrame(result_arr, index=dates_dt, columns=inst_list)
+        else:
+            # Daily: build a numpy array by positional index — avoids all pandas
+            # column-label assignment overhead (~0.3ms × 800 cols = 240ms).
+            inst_list = list(instruments.keys())
+            inst_to_idx = {inst_id: i for i, inst_id in enumerate(inst_list)}
+            dates_ts_list = list(pd.DatetimeIndex(dates_dt))
+            result_arr = np.zeros((len(dates_ts_list), len(inst_list)), dtype=float)
+            for inst_id, adjustments in self._carry_adjustments.items():
+                col_idx = inst_to_idx.get(inst_id, -1)
+                if col_idx < 0:
+                    continue
+                for k, ts in enumerate(dates_ts_list):
+                    result_arr[k, col_idx] = adjustments.get(ts, 0.0)
+            result = pd.DataFrame(result_arr, index=dates_dt, columns=inst_list)
 
         return result
 
