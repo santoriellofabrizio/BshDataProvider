@@ -1,6 +1,6 @@
-from sfm_data_provider.providers.timescale.handlers.base_handlers import Handler
-from sfm_data_provider.core.enums.instrument_types import InstrumentType
-from sfm_data_provider.providers.timescale.query_timescale import QueryTimeScale
+from providers.timescale.handlers.base_handlers import Handler
+from core.enums.instrument_types import InstrumentType
+from providers.timescale.query_timescale import QueryTimeScale
 
 
 class IndexHandler(Handler):

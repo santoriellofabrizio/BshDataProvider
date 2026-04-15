@@ -1,7 +1,7 @@
 import pandas as pd
-from sfm_data_provider.providers.timescale.handlers.base_handlers import Handler
-from sfm_data_provider.providers.timescale.handlers.handlers_utils import _freq_to_seconds, _build_results, _normalize_dataframe
-from sfm_data_provider.providers.timescale.query_timescale import QueryTimeScale
+from providers.timescale.handlers.base_handlers import Handler
+from providers.timescale.handlers.handlers_utils import _freq_to_seconds, _build_results, _normalize_dataframe
+from providers.timescale.query_timescale import QueryTimeScale
 
 
 class FutureHandler(Handler):
@@ -15,8 +15,7 @@ class FutureHandler(Handler):
         market = first.market
         snapshot_time = first.snapshot_time
 
-        if not is_daily:
-             sec = _freq_to_seconds(first.frequency)
+        sec = _freq_to_seconds(first.frequency)
 
         subs = [
             r.subscription(first.start) if callable(r.subscription) else r.subscription

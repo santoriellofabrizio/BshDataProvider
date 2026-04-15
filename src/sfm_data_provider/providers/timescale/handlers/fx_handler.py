@@ -1,9 +1,9 @@
 from datetime import time
 import pandas as pd
-from sfm_data_provider.providers.timescale.handlers.base_handlers import Handler
+from providers.timescale.handlers.base_handlers import Handler
 
-from sfm_data_provider.providers.timescale.handlers.handlers_utils import _freq_to_seconds, _build_results, _normalize_dataframe
-from sfm_data_provider.providers.timescale.query_timescale import QueryTimeScale
+from providers.timescale.handlers.handlers_utils import _freq_to_seconds, _build_results, _normalize_dataframe
+from providers.timescale.query_timescale import QueryTimeScale
 
 
 class FXHandler(Handler):
@@ -24,7 +24,7 @@ class FXHandler(Handler):
         fields = first.fields if isinstance(first.fields, list) else [first.fields]
 
         # ======================================================================
-        # DAILY -> ciclo sulle date, concat, normalize, build_results
+        # DAILY → ciclo sulle date, concat, normalize, build_results
         # ======================================================================
         if is_daily:
             days = self.holiday_manager.get_business_days(first.start, first.end, "FX")
@@ -63,7 +63,7 @@ class FXHandler(Handler):
             )
 
         # ======================================================================
-        # INTRADAY -> ciclo sulle date, concat, normalize, build_results
+        # INTRADAY → ciclo sulle date, concat, normalize, build_results
         # ======================================================================
         sec = _freq_to_seconds(first.frequency)
         days = pd.date_range(first.start, first.end, freq="D")
