@@ -119,7 +119,8 @@ class FxSpotComponent(Component):
             fx_prices = fx_prices.to_frame(timestamp).T
 
         new_fx_prices = normalize_fx_columns(fx_prices)
-        self._fx_prices = pd.concat([self._fx_prices, new_fx_prices]).drop_duplicates().sort_index()
+        # Live tick timestamp is always newest — skip expensive value-dedup.
+        self._fx_prices = pd.concat([self._fx_prices, new_fx_prices])
 
         if self._fx_returns_cache is not None and len(self._fx_returns_cache) > 0:
             self._fx_returns_cache = self._fx_returns_cache.iloc[:-1]
