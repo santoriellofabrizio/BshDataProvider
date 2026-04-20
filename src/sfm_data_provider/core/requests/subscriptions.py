@@ -246,7 +246,7 @@ class BloombergSubscriptionBuilder(BaseSubscriptionBuilder):
             case InstrumentType.INDEX:
                 if "INDEX" in inst.id.lower():
                     return inst.id
-                return f"{inst.id} INDEX"
+                return f"{inst.ticker} INDEX"
             
             case _:
                 raise NotImplementedError(f"subsciption rule of {itype} not Implemented. ")

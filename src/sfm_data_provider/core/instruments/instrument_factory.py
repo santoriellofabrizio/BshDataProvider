@@ -333,7 +333,7 @@ class InstrumentFactory(Singleton):
             if not family and ticker:
                 family = self.classifier.index.get_family(ticker)
             if not tenor:
-                tenor = self.classifier.index.get_tenor(ticker, family)
+                tenor = self.classifier.index.get_tenor(id_, family)
             ccy = ccy or self.classifier.index.get_currency_from_family(family)
 
         row = self.classifier.index.lookup_by_ticker(ticker) or {}

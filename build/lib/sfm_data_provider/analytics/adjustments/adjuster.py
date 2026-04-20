@@ -203,7 +203,10 @@ class Adjuster:
         try:
             if prices is not None: # Apply temporary updates
                 prices = self._prepare_new_prices(prices)
-                self._prices = pd.concat([self._prices, prices]).drop_duplicates().sort_index()
+                # Live tick timestamp = pd.Timestamp.now() — always newest, no sort or
+                # value-dedup needed. drop_duplicates() on 800-col float DataFrames builds
+                # Python tuples per row and accounts for ~70–150ms of live_update latency.
+                self._prices = pd.concat([self._prices, prices])
             t2 = time.perf_counter()
 
             self._update_components(timestamp, component_data, temp=True)

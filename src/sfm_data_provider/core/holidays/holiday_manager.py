@@ -59,6 +59,9 @@ class HolidayManager:
         if dt.strftime("%m-%d") in fixed_days:
             return True
 
+        elif dt in market_cfg.get("other_days",[]):
+            return True
+
         return False
 
     def is_business_day(self, dt: date, market: str = "default") -> bool:

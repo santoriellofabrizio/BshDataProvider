@@ -8,6 +8,7 @@ Uses last cum-dividend price before midnight for normalization.
 from datetime import date, datetime
 from typing import Union, List, Optional
 from functools import cached_property
+import numpy as np
 import pandas as pd
 import logging
 
@@ -106,25 +107,34 @@ class DividendComponent(Component):
             self._instruments_cache = instruments
 
         dates_dt = self._normalize_dates(dates)
-        result = pd.DataFrame(0.0, index=dates_dt, columns=list(instruments.keys()))
-
         is_intraday = dates_dt and any(d.hour != 0 or d.minute != 0 for d in dates_dt)
 
-        for inst_id, adjustments in self._normalized_dividends.items():
-            if inst_id not in result.columns:
-                continue
+        if is_intraday:
+            # Fast path: searchsorted maps each dividend midnight to its enclosing interval.
+            # Dividends are sparse (each instrument has 0–N events), so we loop per-instrument
+            # but avoid the O(n_dates) inner scan and pd.Timestamp creation per comparison.
+            inst_list = list(instruments.keys())
+            inst_to_idx = {iid: i for i, iid in enumerate(inst_list)}
+            result_arr = np.zeros((len(dates_dt), len(inst_list)), dtype=float)
+            dates_ns = pd.DatetimeIndex(dates_dt).asi8  # int64 ns, computed once
 
-            if is_intraday:
-                # Intraday: find interval containing dividend
-                for div_dt, adjustment in adjustments.items():
-                    for i in range(1, len(dates_dt)):
-                        t1_ts = pd.Timestamp(dates_dt[i - 1])
-                        t2_ts = pd.Timestamp(dates_dt[i])
-                        if t1_ts < div_dt <= t2_ts:
-                            result.loc[dates_dt[i], inst_id] += adjustment
-                            break
-            else:
-                # Daily: apply at midnight (normalized date)
+            for inst_id, adjustments in self._normalized_dividends.items():
+                col_idx = inst_to_idx.get(inst_id, -1)
+                if col_idx < 0 or not adjustments:
+                    continue
+                div_ns = pd.DatetimeIndex(list(adjustments.keys())).asi8
+                raw_idxs = np.searchsorted(dates_ns, div_ns, side='left')
+                for k, (raw_idx, adjustment) in enumerate(zip(raw_idxs, adjustments.values())):
+                    if 0 < raw_idx < len(dates_dt):
+                        result_arr[raw_idx, col_idx] += adjustment
+
+            result = pd.DataFrame(result_arr, index=dates_dt, columns=inst_list)
+        else:
+            result = pd.DataFrame(0.0, index=dates_dt, columns=list(instruments.keys()))
+            # Daily: apply at midnight (normalized date)
+            for inst_id, adjustments in self._normalized_dividends.items():
+                if inst_id not in result.columns:
+                    continue
                 for div_dt, adjustment in adjustments.items():
                     div_date = div_dt.normalize()
                     if div_date in dates_dt:

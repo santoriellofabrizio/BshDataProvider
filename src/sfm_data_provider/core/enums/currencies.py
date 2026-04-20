@@ -28,6 +28,7 @@ class CurrencyEnum(str, Enum):
     RON = "RON"  # Romanian Leu
     HRK = "HRK"  # Croatian Kuna
     ISK = "ISK"  # Icelandic Krona
+    PYG = "PYG"
 
     # --- Valute extra-UE e globali ---
     RUB = "RUB"  # Russian Ruble

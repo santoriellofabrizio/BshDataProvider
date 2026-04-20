@@ -1,5 +1,6 @@
 import logging
 from datetime import date, timedelta
+import datetime
 from typing import List, Dict, Any, Set
 
 import blpapi
@@ -87,7 +88,7 @@ class BloombergHistoricalHandler(HistoricalFieldHandler):
                 field_data = {}
                 for dt, fields_dict in date_data.items():
                     for field, value in fields_dict.items():
-                        field_data.setdefault(field.upper(), {})[dt] = value
+                        field_data.setdefault(field.upper(), {})[datetime.datetime.combine(dt,datetime.time(0))] = value
                 result[sub] = field_data
 
         return result

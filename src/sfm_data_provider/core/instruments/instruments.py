@@ -272,6 +272,27 @@ class SwapInstrument(Instrument):
 
 
 @dataclass
+class BondInstrument(Instrument):
+    """
+    Represents a fixed income bond instrument.
+
+    Fields:
+        maturity: Maturity date (ISO string or datetime.date)
+        coupon: Annual coupon rate (decimal, e.g. 0.05 = 5%)
+        ytm: Yield to maturity (decimal).  Used as fallback when no
+             time-series YTM is provided to BondAccruedInterestComponent.
+    """
+    maturity: Optional[str] = None
+    coupon: Optional[float] = None
+    ytm: Optional[float] = None
+
+    def __post_init__(self):
+        self.type = InstrumentType.BOND
+        super().__post_init__()
+
+
+
+@dataclass
 class CDXIndexInstrument(Instrument):
     ticker_root: Optional[str] = None
     index_name: Optional[str] = None

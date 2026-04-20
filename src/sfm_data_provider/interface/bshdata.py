@@ -101,6 +101,9 @@ class BshData:
     def enable_cache() -> None:
         enable_cache()
 
+    def get_factory(self):
+        return self.market.instrument_builder
+
     @staticmethod
     def disable_cache() -> None:
         disable_cache()

@@ -123,7 +123,7 @@ class InfoDataAPI(BaseAPI):
 
         # Check if we need fallbacks
         if fallbacks:
-            incomplete = self.client.tracker.get_failed() + self.client.tracker.get_incomplete()
+            incomplete = [r for r in  self.client.tracker.get_failed() + self.client.tracker.get_incomplete() if r.request.instrument in instruments]
             if incomplete:
                 self.log_request(
                     f"[fallback] {len(incomplete)} incomplete requests, trying {len(fallbacks)} fallback(s)"

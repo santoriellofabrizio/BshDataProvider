@@ -3,5 +3,4 @@ matplotlib>=3.9.0
 pytest-mock
 ruamel-yaml>=0.18.6
 sfm-datalibrary>=1.0.76348
-stats
 tqdm>=4.64.0

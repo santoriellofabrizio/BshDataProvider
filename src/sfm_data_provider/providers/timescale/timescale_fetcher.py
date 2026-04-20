@@ -62,8 +62,9 @@ class TimescaleFetcher(BaseFetcher):
         self.market_chain = market_chain
 
         # Build info data handler chain
-        self.info_chain = YTMHandler() \
-                          .set_next(MarketTradesHandler())
+        handler = YTMHandler()
+        handler.set_next(MarketTradesHandler())
+        self.info_chain = handler
 
         self.general_chain = GeneralInfoHandler()
 

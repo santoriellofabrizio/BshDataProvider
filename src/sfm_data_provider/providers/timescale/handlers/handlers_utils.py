@@ -1,5 +1,4 @@
 import logging
-from weakref import finalize
 
 import pandas as pd
 
@@ -42,9 +41,11 @@ def _normalize_dataframe(df: pd.DataFrame) -> pd.DataFrame:
     if "spread" not in cols and {"bid", "ask"} <= cols:
         df["spread"] = (df["ask"] - df["bid"]) / 2
 
+    # FIX: calcolo denominatore separato per evitare problemi di operator precedence
     # spread_pct = (ask - bid) / (ask + bid)
     if "spread_pct" not in cols and {"bid", "ask"} <= cols:
-        df["spread_pct"] = (df["ask"] - df["bid"]) / (df["ask"] + df["bid"]).replace(0, pd.NA)
+        denom = (df["ask"] + df["bid"]).replace(0, pd.NA)
+        df["spread_pct"] = (df["ask"] - df["bid"]) / denom
 
     # Costruzione date da timestamp
     if "timestamp" in df.columns and "date" not in df.columns:
@@ -78,14 +79,23 @@ def _build_results(
     df = _ensure_columns_are_upper(df)
     results: dict[str, dict[str, dict]] = {}
 
-    # ✅ ref_index SOLO per daily (per intraday non serve!)
+    # ref_index SOLO per daily (per intraday non serve)
     ref_index = pd.DatetimeIndex(business_days) if is_daily else None
 
     # Cicla ogni request (instrument)
     for req in requests:
         isin = req.instrument.isin or req.instrument.id
+
         if not df.empty:
-            sub_df = df[df["ISIN"] == req.subscription]
+            # FIX: loop su ref_index con variabile `d`, rimosso il pre-loop `subs` che
+            # usava `first` (undefined) e veniva comunque sovrascritto qui dentro
+            if callable(req.subscription):
+                subs = [req.subscription(d) for d in ref_index]
+            else:
+                subs = [req.subscription]
+
+            sub_df = df[df["ISIN"].isin(subs)]
+
             if sub_df.empty:
                 # Se non ci sono dati per quell'ISIN
                 if is_daily:
@@ -99,7 +109,7 @@ def _build_results(
                     results[req.instrument.id] = {f: {} for f in fields}
                 continue
 
-            # ✅ Costruisce l'indice temporale come DatetimeIndex
+            # Costruisce l'indice temporale come DatetimeIndex
             idx = pd.to_datetime(sub_df["DATE"] if is_daily else sub_df["TIMESTAMP"])
 
             # Crea dizionario field → {timestamp: valore}
@@ -110,7 +120,7 @@ def _build_results(
                         pd.Series(sub_df[f].values, index=idx)
                         .groupby(level=0)
                         .mean()
-                        .reindex(ref_index)  # ✅ Ora funziona! Entrambi DatetimeIndex
+                        .reindex(ref_index)
                         .to_dict()
                     )
                     for f in fields
@@ -124,7 +134,6 @@ def _build_results(
                         .loc[fstart:fend]
                         .groupby(level=0)
                         .mean()
-                        # ❌ NO .reindex() per intraday! Mantieni solo timestamp reali
                         .to_dict()
                     )
                     for f in fields

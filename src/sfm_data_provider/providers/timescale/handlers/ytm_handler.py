@@ -38,7 +38,7 @@ class YTMHandler(Handler):
         hm = HolidayManager()
         dates = [d.date() for d in hm.get_business_days(first.start, first.end)]
         df = query.get_etf_ytm(isins, dates, coverage_threshold)
-        df = df[isins]
+        df = df.reindex(isins,axis=1)
         df.columns = ids
         result = {
             col: {"YTM": df[col].to_dict()}

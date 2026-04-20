@@ -29,7 +29,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field, asdict
 from datetime import time, datetime, date
-from typing import Any, Callable, Dict, List, Optional, Union
+from typing import Any, Callable, Dict, List, Optional, Union, Literal
 
 import datetime as dt
 from sfm_data_provider.core.enums.datasources import DataSource
@@ -38,6 +38,7 @@ from sfm_data_provider.core.enums.frequency import Frequency
 from sfm_data_provider.core.enums.markets import Market
 
 
+RequestType = Literal['general', 'historical', 'reference', 'intraday', 'daily', 'bulk']
 # ============================================================
 # BASE REQUEST (fundamentale)
 # ============================================================
@@ -48,7 +49,7 @@ class BaseRequest:
     fields: Union[str, List[str]]
     instrument: Optional[instrument] = None
     source: Optional[DataSource] = None
-    request_type: Optional[str] = None
+    request_type: Optional[RequestType] = None
 
     def __repr__(self) -> str:
         """Rappresentazione leggibile della richiesta, con tutti gli attributi."""
@@ -86,7 +87,7 @@ class BaseStaticRequest(BaseRequest):
     end: Optional[dt.date] = field(default_factory=lambda: dt.date.today())
     extra_params: Dict[str, Any] = field(default_factory=dict)
     subscription: Optional[str, Callable] = None
-    request_type: Optional[str] = None
+    request_type: Optional[RequestType] = None
     market: Optional[str] = None
 
     def __post_init__(self):
@@ -197,11 +198,12 @@ class DailyRequest(BaseMarketRequest):
     snapshot_time: Optional[time] = None
     seconds_sampling: Optional[int] = None  # per Timescale
     adjustment_mode: Optional[str] = None   # per Bloomberg
-    request_type = "daily"
+    request_type: Optional[RequestType] = 'daily'
 
     def __post_init__(self):
         super().__post_init__()
         self.frequency = Frequency.DAILY
+        self.request_type = self.request_type or 'daily'
         self.extra_params.update({
             "snapshot_time": self.snapshot_time,
             "seconds_sampling": self.seconds_sampling,
@@ -214,7 +216,7 @@ class IntradayRequest(BaseMarketRequest):
     """Richiesta dati is_intraday (tick, 1m, 5m, ecc.)."""
     interval: str = "1m"
     event: Optional[str] = None  # es. TRADE, BID, ASK (solo Bloomberg)
-    request_type = "is_intraday"
+    request_type: RequestType = "intraday"
 
     def __post_init__(self):
         super().__post_init__()
@@ -229,7 +231,7 @@ class IntradayRequest(BaseMarketRequest):
 class ReferenceRequest(BaseStaticRequest):
     """Richiesta dati anagrafici (ISIN, ticker, descrizione, ecc.)."""
     fields: List[str] = field(default_factory=lambda: ["ISIN", "TICKER", "CURRENCY", "NAME"])
-    request_type = "reference"
+    request_type: RequestType = "reference"
     market: Optional[str] = None
 
     def __post_init__(self):
@@ -254,7 +256,7 @@ class BulkRequest(BaseStaticRequest):
 
     def __post_init__(self):
         super().__post_init__()
-        self.request_type = "bulk"
+        self.request_type: RequestType = "bulk"
         if not isinstance(self.fields, str) and len(self.fields) > 1:
             raise ValueError("BulkRequest only accepts one field at a time")
 
@@ -277,7 +279,7 @@ class GeneralRequest(BaseStaticRequest):
 
     def __post_init__(self):
         super().__post_init__()
-        self.request_type = "general"
+        self.request_type: RequestType = "general"
         if self.instrument:
             raise ValueError("GeneralRequest doesn't accept instrument")
 
@@ -288,7 +290,7 @@ class HistoricalRequest(BaseStaticRequest):
 
     def __post_init__(self):
         super().__post_init__()
-        self.request_type = "historical"
+        self.request_type: RequestType = "historical"
         if not isinstance(self.fields, str) and len(self.fields) > 1:
             raise ValueError("HistoricalRequest only accepts one field at a time")
         if not self._validate_field():

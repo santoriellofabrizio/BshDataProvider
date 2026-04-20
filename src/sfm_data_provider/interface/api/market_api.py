@@ -334,13 +334,13 @@ class MarketDataAPI(BaseAPI):
             instruments: List,
             fields: List[str],
             source: Union[str, List[str], Dict[str, str]],
-            subscription: Union[str, List[str], Dict[str, str]],
-            market: Union[str, List[str], Dict[str, str]],
             frequency: str,
             snapshot_time: Optional[time],
             start: Union[dt.date, datetime],
             end: Union[dt.date, datetime],
             fallbacks: Optional[List[Dict[str, Any]]],
+            subscription: Union[str, List[str], Dict[str, str]] = None,
+            market: Union[str, List[str], Dict[str, str]]= None,
             **extra_params,
     ):
 
@@ -767,6 +767,7 @@ class MarketDataAPI(BaseAPI):
             source: str = "timescale",
             market: Optional[Union[str, List[str]]] = None,
             suffix: Optional[str] = None,
+            snapshot_time: Union[str, time] = "17:00:00",
             **extra_params,
     ):
         """Serie daily per Futures (EUREX di default su timescale)."""
@@ -784,6 +785,7 @@ class MarketDataAPI(BaseAPI):
             frequency="1d",
             fields=fields,
             market=market,
+            snapshot_time=snapshot_time,
             suffix=suffix,
             **extra_params,
         )
@@ -797,7 +799,7 @@ class MarketDataAPI(BaseAPI):
             fields: Union[str, List[str]] = "MID",
             source: str = "bloomberg",
             tenor: Optional[Union[str, List[str]]] = None,
-            subscriptions: Optional[Union[str, List[str]]] = None,
+            subscription: Optional[Union[str, List[str]]] = None,
             **extra_params,
     ):
         """daily market data swap, refer to Oracle anagraphic for ticker choice."""
@@ -810,7 +812,7 @@ class MarketDataAPI(BaseAPI):
             fields=fields,
             source=source,
             tenor=tenor,
-            subscriptions=subscriptions,
+            subscription=subscription,
             **extra_params,
         )
 
@@ -868,7 +870,7 @@ class MarketDataAPI(BaseAPI):
                       fields: Union[str, List[str]] = "MID",
                       source: str = "bloomberg",
                       tenor: Optional[Union[str, List[str]]] = None,
-                      subscriptions: Optional[Union[str, List[str]]] = None,
+                      subscription: Optional[Union[str, List[str]]] = None,
                       **extra_params,
                       ):
         """daily market data cdx, refer to Oracle anagraphic for ticker choice."""
@@ -881,7 +883,7 @@ class MarketDataAPI(BaseAPI):
             fields=fields,
             source=source,
             tenor=tenor,
-            subscriptions=subscriptions,
+            subscription=subscription,
             **extra_params,
         )
 
@@ -901,6 +903,9 @@ class MarketDataAPI(BaseAPI):
         """Get daily repo rates. currencies=['EUR','USD'], tenor=None(overnight) or '1M'/'3M'/etc."""
         OVERNIGHT = {'EUR': 'ESTRON INDEX', 'USD': 'SOFRRATE INDEX', 'GBP': 'SONIA INDEX', 'JPY': 'TONAR INDEX',
                      'CHF': 'SARON INDEX'}
+
+        if 'snipping_time' in extra_params:
+            logging.warning(f"only EOD prices are available")
 
         if currencies:
             currencies = [currencies] if isinstance(currencies, str) else currencies

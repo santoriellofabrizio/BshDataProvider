@@ -12,4 +12,4 @@ class FallbackHandler(Handler):
 
     def process(self, requests, query):
         logger.warning("Unhandled requests: %s", [r.instrument.id for r in requests])
-        raise NotImplementedError
+        return {r.instrument.id: {f: {} for f in r.fields} for r in requests}

@@ -10,8 +10,8 @@ import logging
 
 from sfm_data_provider.analytics.adjustments.component import Component
 from sfm_data_provider.analytics.adjustments.common import calculate_year_fractions
-from sfm_data_provider.analytics.adjustments import InstrumentProtocol, EtfInstrumentProtocol
 from sfm_data_provider.core.enums.instrument_types import InstrumentType
+from sfm_data_provider.core.instruments.instruments import Instrument
 
 logger = logging.getLogger(__name__)
 
@@ -83,7 +83,7 @@ class YtmComponent(Component):
             f"{f', target={len(self.target)} instruments' if self.target else ''}"
         )
 
-    def is_applicable(self, instrument: InstrumentProtocol) -> bool:
+    def is_applicable(self, instrument) -> bool:
         """
         Check if YTM applicable (domain logic only).
 
@@ -98,10 +98,9 @@ class YtmComponent(Component):
 
         # ETP (ETF): Check underlying_type
         if instrument.type == InstrumentType.ETP:
-            if isinstance(instrument, EtfInstrumentProtocol):
-                underlying = instrument.underlying_type
-                if underlying and underlying not in ['FIXED INCOME', 'MONEY MARKET']:
-                    return False
+            underlying = instrument.underlying_type
+            if underlying and underlying not in ['FIXED INCOME', 'MONEY MARKET']:
+                return False
             return True
 
         # FUTURE: Check underlying_type attribute
@@ -126,9 +125,8 @@ class YtmComponent(Component):
 
     def calculate_adjustment(
         self,
-        instruments: dict[str, InstrumentProtocol],
+        instruments: dict[str, Instrument],
         dates: Union[List[date], List[datetime]],
-        prices: pd.DataFrame,
     ) -> pd.DataFrame:
         """Calculate YTM adjustments with vectorized operations."""
         # 1. Normalize dates to datetime (MANDATORY)

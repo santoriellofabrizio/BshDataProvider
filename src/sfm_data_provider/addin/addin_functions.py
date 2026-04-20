@@ -62,7 +62,7 @@ def daily_etf_price_array(
                            snapshot_time="Time at which is the prices are screenshot. Defaults to '17:00:00'."
                            )
                       )
-def daily_etf_pric(
+def daily_etf_price(
         date_input: datetime.datetime,
         etf_id: CellsRange1D[str] = None,
         isin: CellsRange1D[str] = None,

@@ -21,10 +21,6 @@ class SwapClassifier(BaseClassifier):
         if idu in df["TICKER"].str.upper().values:
             return idu
 
-        # Tenor interno (EUZCISWAP5)
-        if self.extract_tenor(idu) is not None:
-            return True
-
         # Prefissi noti
         prefixes = ("EUSWI", "ILSWI", "USSWIT", "EUSW", "USOSFRC")
         if idu.startswith(prefixes):

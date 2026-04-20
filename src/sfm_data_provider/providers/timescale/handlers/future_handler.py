@@ -15,8 +15,6 @@ class FutureHandler(Handler):
         market = first.market
         snapshot_time = first.snapshot_time
 
-        sec = _freq_to_seconds(first.frequency)
-
         subs = [
             r.subscription(first.start) if callable(r.subscription) else r.subscription
             for r in requests
@@ -30,8 +28,12 @@ class FutureHandler(Handler):
         if is_daily:
             days = pd.date_range(first.start, first.end, freq="D")
             rows = []
-
             for dt in days:
+                subs = [
+                    r.subscription(dt) if callable(r.subscription) else r.subscription
+                    for r in requests
+                ]
+
                 df = query.fairvalue_array_isin(
                     date=dt.date(),
                     market=market,
@@ -68,6 +70,8 @@ class FutureHandler(Handler):
         # ------------------------------------------------------------------
         days = pd.date_range(first.start, first.end, freq="D")
         rows = []
+
+        sec = _freq_to_seconds(first.frequency)
 
         for dt in days:
             for sub in subs:

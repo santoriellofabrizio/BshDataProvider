@@ -75,10 +75,10 @@ class IndexClassifier(BaseClassifier):
         if family:
             fam_u = family.upper()
             # default: overnight
-            warnings.warn(f"Tenor mancante, uso default TENOR='1D' per family {fam_u}")
-            return "1D"
-
-        return None
+            warnings.warn(f"Tenor mancante, uso default TENOR='1D' per family {fam_u} o provo estrazione")
+            return self.extract_tenor(idu) or "1D"
+        else:
+            self.extract_tenor(idu)
 
     # ---------------------------------------------
     # TICKER derivato da FAMILY + TENOR
@@ -167,11 +167,11 @@ class IndexClassifier(BaseClassifier):
         # --------------------------------------------------------------
         if idu in df["FAMILY"].str.upper().values:
             # Tenor mancante -> warning + default 1D
-            if not tenor:
+            if not tnr:
                 logger.warning(f"Tenor missing for Index Family {idu}. Using default tenor '1D'.")
-                tenor = "1D"
+                tnr = "1D"
 
-            ten_u = tenor.upper()
+            ten_u = tnr.upper()
 
             mask = (
                            df["FAMILY"].str.upper() == idu
@@ -183,6 +183,26 @@ class IndexClassifier(BaseClassifier):
                 return df.loc[mask, "TICKER"].iloc[0]
             logger.warning(f"No ticker found for family={idu} tenor={ten_u}")
             return None
-        return None
+        else:
+            if self.has_family(idu):
+                family = self.has_family(idu)
+                tenor = self.extract_tenor(idu)
+                ticker = self.get_ticker(family, tenor)
+                return ticker
 
 
+
+    def has_family(self, idu: str) -> Optional[str]:
+        df = self._load()
+        for tnr in df["TENOR"].unique():
+            if tnr in idu:
+                tenor = tnr
+                try_family = idu.replace(tnr, "")
+                if try_family in df["FAMILY"].unique():
+                    return try_family
+
+    def extract_tenor(self, idu: str) -> Optional[str]:
+        df = self._load()
+        for tnr in df["TENOR"].unique():
+            if tnr in idu:
+                return tnr
