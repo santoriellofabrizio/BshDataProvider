@@ -93,6 +93,7 @@ def test_credit_futures(instrument_factory):
     fehy = instrument_factory.create("FEHY202606", autocomplete=True)
     a = 0
 
-
+def test_swaps(instrument_factory):
+    EUSWI10 = instrument_factory.create("EUZCISWAP1", autocomplete=True)
 
 

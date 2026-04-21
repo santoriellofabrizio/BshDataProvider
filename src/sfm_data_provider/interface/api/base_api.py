@@ -35,6 +35,9 @@ class BaseAPI:
     #  Parsing date / datetime / time
     # ------------------------------------------------------------
 
+    def register(self, instrument: Instrument):
+        self.instrument_builder.register(instrument)
+
     @staticmethod
     def _parse_date(value: Union[str, date, datetime, None]) -> Optional[date]:
         """Converte una stringa o datetime in date."""
@@ -94,8 +97,8 @@ class BaseAPI:
     # 🔹 Costruzione strumenti e risoluzione ID
     # ============================================================
 
-    def _build_instrument(self, **kwargs) -> Instrument:
-        return self.instrument_builder.create(**kwargs)
+    def build_instrument(self, *args, **kwargs) -> Instrument:
+        return self.instrument_builder.create(*args, **kwargs)
 
     def _resolve_identifiers(
             self,

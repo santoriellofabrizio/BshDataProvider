@@ -302,7 +302,7 @@ class MarketDataAPI(BaseAPI):
         }
 
         instruments = [
-            self._build_instrument(
+            self.build_instrument(
                 id=ids[i],
                 type=type_[i],
                 ticker=tickers[i],

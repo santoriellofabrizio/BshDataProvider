@@ -3,7 +3,7 @@ from abc import ABC, abstractmethod
 from datetime import datetime
 from functools import partial
 from pathlib import Path
-from typing import Callable, Optional, Dict, Any
+from typing import Callable, Optional, Dict, Any, Union
 
 from ruamel.yaml import YAML
 
@@ -13,6 +13,25 @@ from sfm_data_provider.core.instruments.instruments import Instrument, FutureIns
 from sfm_data_provider.core.enums.datasources import DataSource
 from sfm_data_provider.core.enums.instrument_types import InstrumentType
 from sfm_data_provider.core.requests.requests import BaseMarketRequest, BaseRequest
+
+
+# ============================================================
+# LIGHTWEIGHT WRAPPER
+# ============================================================
+class _SimpleRequest:
+    """
+    Wrapper minimale che avvolge un Instrument nudo in un oggetto
+    compatibile con l'interfaccia attesa dai builder.
+    Creato da _normalize_request quando l'input è un Instrument diretto.
+    """
+
+    market: None = None
+    tenor: None = None
+    subscription: None = None
+
+    def __init__(self, instrument: Instrument, source: DataSource | None = None):
+        self.instrument = instrument
+        self.source = source
 
 
 # ============================================================
@@ -57,6 +76,27 @@ class BaseSubscriptionBuilder(ABC):
         cls._config = config or {}
 
     # ------------------------------------------------------------
+    # NORMALIZE
+    # ------------------------------------------------------------
+    @staticmethod
+    def _normalize_request(
+        request_or_instrument: Union["BaseRequest", Instrument],
+        source: DataSource | None = None,
+    ) -> tuple[Union["BaseRequest", _SimpleRequest], Instrument]:
+        """
+        Accetta indifferentemente un BaseRequest o un Instrument nudo.
+        Ritorna sempre (request, instrument).
+
+        Se viene passato un Instrument, viene wrappato in un _SimpleRequest
+        con il source indicato, senza alterare la logica dei builder.
+        """
+        if isinstance(request_or_instrument, Instrument):
+            req = _SimpleRequest(request_or_instrument, source=source)
+            return req, request_or_instrument
+        req = request_or_instrument
+        return req, req.instrument
+
+    # ------------------------------------------------------------
     # HELPERS
     # ------------------------------------------------------------
     @staticmethod
@@ -91,7 +131,11 @@ class BaseSubscriptionBuilder(ABC):
     # ------------------------------------------------------------
     @classmethod
     @abstractmethod
-    def build_subscription(cls, request: BaseMarketRequest) -> str | Callable:
+    def build_subscription(
+        cls,
+        request: Union["BaseRequest", Instrument],
+        source: DataSource | None = None,
+    ) -> str | Callable:
         raise NotImplementedError
 
 
@@ -102,8 +146,13 @@ class TimescaleSubscriptionBuilder(BaseSubscriptionBuilder):
     """Costruisce la subscription per Timescale."""
 
     @classmethod
-    def build_subscription(cls, request: BaseRequest) -> str | Callable:
-        inst = request.instrument
+    def build_subscription(
+        cls,
+        request: Union[BaseRequest, Instrument],
+        source: DataSource = DataSource.TIMESCALE,
+    ) -> str | Callable:
+        request, inst = cls._normalize_request(request, source)
+
         cfg = cls._get_subscription_from_config("timescale", inst)
         if cfg:
             return cfg
@@ -137,8 +186,13 @@ class BloombergSubscriptionBuilder(BaseSubscriptionBuilder):
     """Costruisce la subscription per Bloomberg."""
 
     @classmethod
-    def build_subscription(cls, request: BaseRequest) -> str | Callable:
-        inst = request.instrument
+    def build_subscription(
+        cls,
+        request: Union[BaseRequest, Instrument],
+        source: DataSource = DataSource.BLOOMBERG,
+    ) -> str | Callable:
+        request, inst = cls._normalize_request(request, source)
+
         cfg = cls._get_subscription_from_config("bloomberg", inst)
         if cfg:
             return cfg
@@ -179,11 +233,11 @@ class BloombergSubscriptionBuilder(BaseSubscriptionBuilder):
                 if not inst.future_underlying and not suffix:
                     raise ValueError("For futures please specify underlying type or set autocomplete=True")
 
-                suffix = suffix or "INDEX" if inst.future_underlying.upper() == "EQUITY" else "COMDTY"
                 if inst.is_active_form:
                     return f"{root or id_}A {suffix}"
                 else:
-                    return partial(get_active_bbg_future, bbg_root=root, suffix=suffix)
+                    return partial(get_active_bbg_future, bbg_root=root, suffix=inst.suffix)
+
             # ============================================================
             # CURRENCYPAIR
             # ============================================================
@@ -219,8 +273,8 @@ class BloombergSubscriptionBuilder(BaseSubscriptionBuilder):
                     tenor = inst.tenor
                     is_active_form = inst.series or inst.is_active_form
                     if index_name:
-                        if is_active_form and  tenor:
-                                return f"{index_name}  GEN {tenor} Corp"
+                        if is_active_form and tenor:
+                            return f"{index_name}  GEN {tenor} Corp"
                         return partial(get_active_cdx_components, index_name=index_name, suffix="Corp")
                     else:
                         raise NotImplementedError("subsciption rule of cdx not Implemented. ")
@@ -239,17 +293,17 @@ class BloombergSubscriptionBuilder(BaseSubscriptionBuilder):
 
                 return f"{base_currency_str}{quoted_currency_str}{tenor} BGN Curncy"
 
-
             # ============================================================
             # DEFAULT
             # ============================================================
             case InstrumentType.INDEX:
-                if "INDEX" in inst.id.lower():
+                if "INDEX" in inst.id.upper():
                     return inst.id
-                return f"{inst.ticker} INDEX"
-            
+                return f"{inst.ticker or inst.id} INDEX"
+
             case _:
                 raise NotImplementedError(f"subsciption rule of {itype} not Implemented. ")
+
 
 # ============================================================
 # ORACLE BUILDER
@@ -258,21 +312,25 @@ class OracleSubscriptionBuilder(BaseSubscriptionBuilder):
     """Costruisce la subscription per Oracle."""
 
     @classmethod
-    def build_subscription(cls, request: BaseRequest, helper=None) -> str | Callable:
-        inst = request.instrument
+    def build_subscription(
+        cls,
+        request: Union[BaseRequest, Instrument],
+        source: DataSource = DataSource.ORACLE,
+    ) -> str | Callable:
+        request, inst = cls._normalize_request(request, source)
+
         if inst:
-             match inst.type:
+            match inst.type:
                 case InstrumentType.ETP | InstrumentType.STOCK:
-                        inst = request.instrument
-                        if inst.isin:
-                            return inst.isin
+                    if inst.isin:
+                        return inst.isin
                 case InstrumentType.CDXINDEX:
                     return inst.ticker_root or inst.ticker
-
                 case InstrumentType.FUTURE:
                     return inst.root
 
         return inst.id
+
 
 # ============================================================
 # UNIVERSAL BUILDER DISPATCHER
@@ -281,7 +339,27 @@ class SubscriptionBuilder:
     """Dispatcher per costruire la subscription in base al provider."""
 
     @staticmethod
-    def build(request: BaseRequest) -> str | Callable:
+    def build(
+        request: Union[BaseRequest, Instrument],
+        source: DataSource | None = None,
+    ) -> str | Callable:
+        # Se è un Instrument nudo il caller deve specificare source
+        if isinstance(request, Instrument):
+            if source is None:
+                raise ValueError(
+                    "Quando si passa un Instrument diretto è necessario specificare `source`."
+                )
+            match source:
+                case DataSource.BLOOMBERG:
+                    return BloombergSubscriptionBuilder.build_subscription(request, source)
+                case DataSource.TIMESCALE:
+                    return TimescaleSubscriptionBuilder.build_subscription(request, source)
+                case DataSource.ORACLE:
+                    return OracleSubscriptionBuilder.build_subscription(request, source)
+                case _:
+                    return None
+
+        # Caso normale: request porta già source
         match request.source:
             case DataSource.BLOOMBERG:
                 return BloombergSubscriptionBuilder.build_subscription(request)
@@ -316,8 +394,8 @@ def get_active_future(inst, current_date) -> str:
     exp_code = f"{year}{month:02d}"
     return f"{inst.id}{exp_code}"
 
-def get_active_timescale_future(ts_root, current_date) -> str:
 
+def get_active_timescale_future(ts_root, current_date) -> str:
     if isinstance(current_date, datetime):
         current_date = current_date.date()
     month = ((current_date.month - 1) // 3 + 1) * 3
@@ -327,6 +405,7 @@ def get_active_timescale_future(ts_root, current_date) -> str:
         year += 1
     exp_code = f"{year}{month:02d}"
     return f"{ts_root}{exp_code}"
+
 
 def get_active_bbg_future(bbg_root: str, current_date, suffix) -> str:
     """
@@ -338,7 +417,6 @@ def get_active_bbg_future(bbg_root: str, current_date, suffix) -> str:
     if isinstance(current_date, datetime):
         current_date = current_date.date()
 
-    # Mappa mesi -> codici Bloomberg
     month_codes = {1: "F", 2: "G", 3: "H", 4: "J", 5: "K", 6: "M",
                    7: "N", 8: "Q", 9: "U", 10: "V", 11: "X", 12: "Z"}
 
@@ -349,11 +427,13 @@ def get_active_bbg_future(bbg_root: str, current_date, suffix) -> str:
         year += 1
 
     code = month_codes[month]
-    year_suffix = str(year)[-1:]  # ultime due cifre
+    year_suffix = str(year)[-1:]
 
     return f"{bbg_root}{code}{year_suffix} {suffix}"
 
+
 from datetime import date
+
 
 def get_active_cdx_components(index_name: str, tenor: str, suffix: str, current_date: date = None):
     """
@@ -372,11 +452,9 @@ def get_active_cdx_components(index_name: str, tenor: str, suffix: str, current_
     if current_date is None:
         current_date = date.today()
 
-    # Serie base: S40 = 20 settembre 2023
     base_series = 40
     base_date = date(2023, 9, 20)
 
-    # Trova quanti roll di marzo/settembre ci sono tra base_date e current_date
     def count_rolls(d1, d2):
         c = 0
         t = d1
@@ -395,7 +473,6 @@ def get_active_cdx_components(index_name: str, tenor: str, suffix: str, current_
              else base_series - count_rolls(current_date, base_date)
 
     return f"{index_name} {series} {tenor} {suffix}"
-
 
 
 # Auto-load YAML config

@@ -75,7 +75,7 @@ class IndexClassifier(BaseClassifier):
         if family:
             fam_u = family.upper()
             # default: overnight
-            warnings.warn(f"Tenor mancante, uso default TENOR='1D' per family {fam_u} o provo estrazione")
+            logger.warning(f"Tenor mancante, uso default TENOR='1D' per family {fam_u} o provo estrazione")
             return self.extract_tenor(idu) or "1D"
         else:
             self.extract_tenor(idu)

@@ -10,8 +10,8 @@ import logging
 
 from sfm_data_provider.analytics.adjustments.component import Component
 from sfm_data_provider.analytics.adjustments.common import calculate_year_fractions
-from sfm_data_provider.analytics.adjustments import InstrumentProtocol
 from sfm_data_provider.core.enums.instrument_types import InstrumentType
+from sfm_data_provider.core.instruments.instruments import Instrument
 
 logger = logging.getLogger(__name__)
 
@@ -58,7 +58,7 @@ class RepoComponent(Component):
         self,
         repo_rates: pd.DataFrame,
         mode: str = 'direct',
-        future_currencies: Optional[pd.Series] = None,
+        future_currencies: Optional[Union[pd.Series, dict]] = None,
         settlement_days: int = 2,
         target: Optional[List[str]] = None,
     ):
@@ -122,7 +122,7 @@ class RepoComponent(Component):
             f"{f', target={len(self.target)} instruments' if self.target else ''}"
         )
 
-    def is_applicable(self, instrument: InstrumentProtocol) -> bool:
+    def is_applicable(self, instrument: Instrument) -> bool:
         """
         Check applicability (domain logic only).
 
@@ -146,7 +146,7 @@ class RepoComponent(Component):
 
     def calculate_adjustment(
         self,
-        instruments: dict[str, InstrumentProtocol],
+        instruments: dict[str, Instrument],
         dates: Union[List[date], List[datetime]],
         prices: pd.DataFrame,
     ) -> pd.DataFrame:

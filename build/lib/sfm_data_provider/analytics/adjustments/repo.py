@@ -58,7 +58,7 @@ class RepoComponent(Component):
         self,
         repo_rates: pd.DataFrame,
         mode: str = 'direct',
-        future_currencies: Optional[pd.Series] = None,
+        future_currencies: Optional[Union[pd.Series, dict]] = None,
         settlement_days: int = 2,
         target: Optional[List[str]] = None,
     ):
@@ -94,6 +94,9 @@ class RepoComponent(Component):
 
         if mode == 'currency' and future_currencies is None:
             raise ValueError("future_currencies required when mode='currency'")
+
+        if isinstance(future_currencies, dict):
+            future_currencies = pd.Series(future_currencies)
 
         self.repo_rates = repo_rates.fillna(0.0)
         self.mode = mode

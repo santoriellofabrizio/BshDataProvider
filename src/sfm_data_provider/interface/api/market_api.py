@@ -302,7 +302,7 @@ class MarketDataAPI(BaseAPI):
         }
 
         instruments = [
-            self._build_instrument(
+            self.build_instrument(
                 id=ids[i],
                 type=type_[i],
                 ticker=tickers[i],
@@ -901,8 +901,8 @@ class MarketDataAPI(BaseAPI):
     ) -> pd.DataFrame:
 
         """Get daily repo rates. currencies=['EUR','USD'], tenor=None(overnight) or '1M'/'3M'/etc."""
-        OVERNIGHT = {'EUR': 'ESTRON INDEX', 'USD': 'SOFRRATE INDEX', 'GBP': 'SONIA INDEX', 'JPY': 'TONAR INDEX',
-                     'CHF': 'SARON INDEX'}
+        OVERNIGHT = {'EUR': 'ESTRON INDEX', 'USD': 'SOFRRATE INDEX', 'GBP': 'SONIO/N INDEX', 'JPY': 'MUTKCALM INDEX',
+                     'CHF': 'SRFXON1 INDEX'}
 
         if 'snipping_time' in extra_params:
             logging.warning(f"only EOD prices are available")
@@ -917,7 +917,7 @@ class MarketDataAPI(BaseAPI):
         else:
             ccy_map = None
 
-        result = self.get(type=InstrumentType.INDEX, ticker=ticker, start=start, end=end,
+        result = self.get(type=InstrumentType.INDEX, ticker=ticker, start=start, end=end, subscription=ticker,
                           fields="PX_LAST", source=source, frequency="1d", request_type="historical", **extra_params)
 
         if isinstance(result, pd.DataFrame):
@@ -926,6 +926,17 @@ class MarketDataAPI(BaseAPI):
                 result = result.rename(columns={t: c for t, c in ccy_map.items() if
                                                 any(t.replace(' INDEX', '') in str(col) for col in result.columns)})
         return result
+
+    def get_daily_index(
+            self,
+            start: Union[dt.date, str],
+            end: Union[dt.date, str] = today(),
+            ticker: Optional[Union[str, List[str]]] = None,
+            source: str = "bloomberg",
+            **extra_params,
+    ) -> pd.DataFrame:
+        return self.get(type=InstrumentType.INDEX, ticker=ticker, start=start, end=end, subscription=ticker,
+                          fields="PX_LAST", source=source, frequency="1d", request_type="historical", **extra_params)
 
     def get_daily_fx_forward(self, start: Union[dt.date, str],
                              end: Union[dt.date, str] = today(),

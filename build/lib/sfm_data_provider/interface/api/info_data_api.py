@@ -280,7 +280,7 @@ class InfoDataAPI(BaseAPI):
         }
 
         instruments = [
-            self._build_instrument(
+            self.build_instrument(
                 id=ids[i], type=type[i], ticker=tickers[i], isin=isins[i],
                 currency=currency[i], market=market[i], autocomplete=auto,
                 **instrument_build_params

@@ -264,11 +264,12 @@ class EquityFuture(FutureInstrument):
 @dataclass
 class SwapInstrument(Instrument):
     tenor: Optional[str] = None
-    swap_type = Optional[str]
+    swap_type: Optional[Literal['inflation', 'basis', 'cross-currency', 'interest-rate']] = None
 
     def __post_init__(self):
         super().__post_init__()
         self.type = InstrumentType.SWAP
+
 
 
 @dataclass

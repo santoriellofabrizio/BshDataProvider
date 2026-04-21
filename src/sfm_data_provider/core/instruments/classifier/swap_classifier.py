@@ -30,6 +30,9 @@ class SwapClassifier(BaseClassifier):
         if "SWI" in idu:
             return True
 
+        if "ZCISWAP" in idu:
+            return True
+
         return False
 
     def extract_ticker(self, symbol: str) -> str | None:

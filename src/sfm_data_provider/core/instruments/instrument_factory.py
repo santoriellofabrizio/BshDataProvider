@@ -310,7 +310,12 @@ class InstrumentFactory(Singleton):
                 or (self.classifier.swap.extract_ticker(id_) or None)
         )
 
-        return cls(id=id_, ticker=ticker, tenor=tenor)
+        is_inflation = 'ZCIS' in id_.upper() or "WI" in id_.upper()
+        is_interest_rate = not is_inflation #todo: improve that shit
+
+        swap_type = 'inflation' if is_inflation else 'interest-rate'
+
+        return cls(id=id_, ticker=ticker, tenor=tenor, swap_type=swap_type)
 
     def _build_index(self, id_, ticker, autocomplete, **kwargs) -> Instrument:
         """
