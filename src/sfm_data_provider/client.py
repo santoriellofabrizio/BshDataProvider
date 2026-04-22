@@ -102,14 +102,14 @@ class BSHDataClient(Singleton):
         results: Dict[str, Dict[str, Any]] = {}
 
         with tqdm(
-            total=len(batches),
+            total=len(requests),
             desc="Fetching data",
             leave=False,
             dynamic_ncols=True,
             bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}]",
         ) as pbar:
             for src, batch in batches.items():
-                pbar.set_description(f"Fetching {src} ({len(batch)} req)")
+                pbar.set_description(f"Fetching {src}")
                 provider = self._get_provider(src)
                 try:
                     batch_result = self._dispatch(provider, batch)
@@ -121,7 +121,7 @@ class BSHDataClient(Singleton):
                     logger.exception(f"Error from {provider.__class__.__name__}: {e}")
                     for req in batch:
                         self._tracker.mark_failed(req.request_id, error=e)
-                pbar.update(1)
+                pbar.update(len(batch))
 
         self._update_tracking(results)
         return results
