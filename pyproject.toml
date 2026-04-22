@@ -1,6 +1,6 @@
 [project]
 name = "sfm_data_provider"
-version = "1.2.78838"
+version = "1.2"
 description = "Data provider project developed by Sella Financial Markets"
 readme = "README.md"
 requires-python = "==3.11.*"

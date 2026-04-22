@@ -75,7 +75,7 @@ class IndexClassifier(BaseClassifier):
         if family:
             fam_u = family.upper()
             # default: overnight
-            logger.warning(f"Tenor mancante, uso default TENOR='1D' per family {fam_u} o provo estrazione")
+            logger.info(f"Tenor mancante, uso default TENOR='1D' per family {fam_u} o provo estrazione")
             return self.extract_tenor(idu) or "1D"
         else:
             self.extract_tenor(idu)
@@ -139,7 +139,7 @@ class IndexClassifier(BaseClassifier):
         if idu.endswith("RATE"):
             return True
 
-        if "ON" in idu or "RATE" in idu:
+        if "ON" in idu or "RATE" in idu or 'INDEX':
             return True
 
         return False
@@ -167,11 +167,11 @@ class IndexClassifier(BaseClassifier):
         # --------------------------------------------------------------
         if idu in df["FAMILY"].str.upper().values:
             # Tenor mancante -> warning + default 1D
-            if not tnr:
+            if not tenor:
                 logger.warning(f"Tenor missing for Index Family {idu}. Using default tenor '1D'.")
-                tnr = "1D"
+                tenor = "1D"
 
-            ten_u = tnr.upper()
+            ten_u = tenor.upper()
 
             mask = (
                            df["FAMILY"].str.upper() == idu

@@ -522,7 +522,7 @@ wheels = [
 
 [[package]]
 name = "sfm-data-provider"
-version = "1.2.78838"
+version = "1.2"
 source = { editable = "." }
 dependencies = [
     { name = "joblib", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },

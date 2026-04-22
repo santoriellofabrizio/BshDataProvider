@@ -1,6 +1,6 @@
-Metadata-Version: 2.1
+Metadata-Version: 2.4
 Name: sfm_data_provider
-Version: 1.2.78838
+Version: 1.2
 Summary: Data provider project developed by Sella Financial Markets
 Requires-Python: ==3.11.*
 Description-Content-Type: text/markdown

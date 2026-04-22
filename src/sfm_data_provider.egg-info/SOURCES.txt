@@ -11,6 +11,7 @@ src/sfm_data_provider/addin/addin_functions.py
 src/sfm_data_provider/analytics/__init__.py
 src/sfm_data_provider/analytics/adjustments/__init__.py
 src/sfm_data_provider/analytics/adjustments/adjuster.py
+src/sfm_data_provider/analytics/adjustments/bond.py
 src/sfm_data_provider/analytics/adjustments/cdx.py
 src/sfm_data_provider/analytics/adjustments/common.py
 src/sfm_data_provider/analytics/adjustments/component.py
@@ -20,6 +21,7 @@ src/sfm_data_provider/analytics/adjustments/fx_spot.py
 src/sfm_data_provider/analytics/adjustments/outlier.py
 src/sfm_data_provider/analytics/adjustments/repo.py
 src/sfm_data_provider/analytics/adjustments/return_calculations.py
+src/sfm_data_provider/analytics/adjustments/specialty_ytm.py
 src/sfm_data_provider/analytics/adjustments/ter.py
 src/sfm_data_provider/analytics/adjustments/ytm.py
 src/sfm_data_provider/analytics/pipeline/__init__.py

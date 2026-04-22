@@ -94,8 +94,12 @@ class BloombergProvider(BaseProvider):
 
         sample = requests[0]
 
+        if getattr(sample, "snapshot_time", None):
+            logger.debug("Dispatching Bloomberg snapshot fetch")
+            return self.fetcher.fetch_snapshot(requests)
+
         # === Caso Daily ===
-        if "d" in str(sample.frequency).lower():
+        elif "d" in str(sample.frequency).lower():
             logger.debug("Dispatching Bloomberg daily fetch")
             return self.fetcher.fetch_daily(requests)
 

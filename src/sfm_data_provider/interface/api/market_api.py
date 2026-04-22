@@ -20,7 +20,7 @@ Typical usage:
     >>> fx = api.get_intraday_fx(date="2024-03-01", id="EURUSD", frequency="5m")
     >>> snap = api.get_day_snapshot_future(date="2024-02-20", ticker="FESXZ4 Index")
 """
-
+import logging
 import uuid
 from datetime import datetime, time
 import datetime as dt
@@ -200,7 +200,7 @@ class MarketDataAPI(BaseAPI):
                 )
 
             # Check if all incomplete are now complete
-            still_incomplete = self.client.tracker.get_incomplete()
+            still_incomplete = self.client.tracker.get_incomplete() + self.client.tracker.get_failed()
             if not still_incomplete:
                 self.log_request("[fallback] All requests now complete")
                 break
@@ -895,7 +895,7 @@ class MarketDataAPI(BaseAPI):
             end: Union[dt.date, str] = today(),
             currencies: Optional[Union[str, List[str]]] = None,
             tenor: Optional[Union[str, List[str]]] = None,
-            ticker: Optional[Union[str, List[str]]] = None,
+            id: Optional[Union[str, List[str]]] = None,
             source: str = "bloomberg",
             **extra_params,
     ) -> pd.DataFrame:
@@ -911,13 +911,13 @@ class MarketDataAPI(BaseAPI):
             currencies = [currencies] if isinstance(currencies, str) else currencies
             n = len(currencies)
             tenor = [tenor] * n if isinstance(tenor, str) or tenor is None else tenor
-            ticker = [OVERNIGHT[c] for c in currencies]  # Overnight only for now
-            ccy_map = {ticker[i]: currencies[i] for i in range(n)}
+            id = [OVERNIGHT[c] for c in currencies]  # Overnight only for now
+            ccy_map = {id[i]: currencies[i] for i in range(n)}
             extra_params['tenor'] = tenor
         else:
             ccy_map = None
 
-        result = self.get(type=InstrumentType.INDEX, ticker=ticker, start=start, end=end, subscription=ticker,
+        result = self.get(type=InstrumentType.INDEX, id=id, start=start, end=end,
                           fields="PX_LAST", source=source, frequency="1d", request_type="historical", **extra_params)
 
         if isinstance(result, pd.DataFrame):

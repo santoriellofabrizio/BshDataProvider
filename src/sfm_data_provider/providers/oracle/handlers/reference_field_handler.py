@@ -8,6 +8,7 @@ from sfm_data_provider.providers.oracle.query_oracle import QueryOracle
 
 logger = logging.getLogger(__name__)
 
+
 class ISINLookupHandler(ReferenceFieldHandler):
 
     def can_handle(self, req) -> bool:
@@ -96,12 +97,13 @@ class ETFStaticHandler(ReferenceFieldHandler):
 
         return result
 
+
 class FutureStaticHandler(ReferenceFieldHandler):
     FUTURE_FIELDS = {
         "BBG_TYPE", "EXCH_SYMBOL", "UNDERLYING", "COUNTRY",
         "GEOGRAPHICAL_AREA", "CONTRACT_SIZE", "UNDERLYING_PRICE_MULTIPLIER",
         "ECONOMY", "CFI_CODE", "DELIVERY_TYPE", "REFERENCE_MARKET",
-        "CALENDAR", "VALID_FROM"
+        "CALENDAR", "VALID_FROM", "FIRST_DELIVERY_DATE","LAST_TRADING_DATE"
     }
 
     def can_handle(self, req) -> bool:
@@ -190,8 +192,8 @@ class StockHandler(ReferenceFieldHandler):
 
         return result
 
-class SwapHandler(ReferenceFieldHandler):
 
+class SwapHandler(ReferenceFieldHandler):
     SWAP_FIELDS = {"TICKER", "TENOR", "SETTLEMENT_DAYS", "SWAP_TYPE"}
 
     def can_handle(self, req) -> bool:

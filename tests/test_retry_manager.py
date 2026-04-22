@@ -80,8 +80,8 @@ def test_retry_etfs(api, sample_isins):
                     'LU0292109856']
 
     results = api.market.get_daily_etf(
-        id=sample_isins, start="2026-04-08",end=today()-timedelta(days=1),
-        snapshot_time=time(16, 45), timeout=10,
+        id=sample_isins, start="2026-04-08",
+        snapshot_time=time(10, 45), timeout=10,
         fallbacks=[{"source": "bloomberg", "market": mkt} for mkt in ["IM", "FP", "NA"]],
     )
 
