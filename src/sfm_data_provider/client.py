@@ -1,4 +1,5 @@
 import logging
+import threading
 from typing import Union, List, Dict, Any, Optional
 from collections import defaultdict
 
@@ -19,6 +20,23 @@ from sfm_data_provider.providers.oracle.provider import OracleProvider
 from sfm_data_provider.providers.timescale.provider import TimescaleProvider
 
 logger = logging.getLogger(__name__)
+
+
+def _animate_progress(pbar, max_increment: int, stop_event: threading.Event,
+                      base_delay: float = 0.05, max_delay: float = 1.5) -> None:
+    """Riempie incrementalmente la barra durante un dispatch sincrono.
+
+    Rallenta in modo esponenziale: non raggiunge mai max_increment da sola,
+    in modo che il chiamante possa scattare al valore reale al termine.
+    """
+    animated = 0
+    delay = base_delay
+    while animated < max_increment - 1:
+        if stop_event.wait(delay):
+            return
+        pbar.update(1)
+        animated += 1
+        delay = min(delay * 1.08, max_delay)
 
 
 class BSHDataClient(Singleton):
@@ -111,6 +129,16 @@ class BSHDataClient(Singleton):
             for src, batch in batches.items():
                 pbar.set_description(f"Fetching {src}")
                 provider = self._get_provider(src)
+
+                target = pbar.n + len(batch)
+                stop_event = threading.Event()
+                anim_thread = threading.Thread(
+                    target=_animate_progress,
+                    args=(pbar, len(batch), stop_event),
+                    daemon=True,
+                )
+                anim_thread.start()
+
                 try:
                     batch_result = self._dispatch(provider, batch)
                     if isinstance(batch_result, dict):
@@ -121,7 +149,11 @@ class BSHDataClient(Singleton):
                     logger.exception(f"Error from {provider.__class__.__name__}: {e}")
                     for req in batch:
                         self._tracker.mark_failed(req.request_id, error=e)
-                pbar.update(len(batch))
+                finally:
+                    stop_event.set()
+                    anim_thread.join(timeout=0.2)
+                    if pbar.n < target:
+                        pbar.update(target - pbar.n)
 
         self._update_tracking(results)
         return results
