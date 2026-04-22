@@ -6,7 +6,6 @@ import blpapi
 
 from sfm_data_provider.core.base_classes.base_fetcher import BaseFetcher
 from sfm_data_provider.core.requests.requests import BaseRequest
-from sfm_data_provider.core.utils.memory_provider import cache_bsh_data
 from sfm_data_provider.providers.bloomberg.handlers.base_handlers import DailyPriceHandler
 
 logger = logging.getLogger(__name__)
@@ -32,7 +31,6 @@ class BloombergDailyPriceHandler(DailyPriceHandler, BaseFetcher):
         freq = str(getattr(req, "frequency", "")).lower()
         return "d" in freq
 
-    @cache_bsh_data
     def process(
             self,
             requests: List[BaseRequest],

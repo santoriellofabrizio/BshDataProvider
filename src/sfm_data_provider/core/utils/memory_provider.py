@@ -261,7 +261,7 @@ def cache_bsh_data(func=None, *, provider=None, category=None, readable_path=USE
     def decorator(func: Callable) -> Callable:
         sig = inspect.signature(func)
         ignore_list = [
-            name for name in ("self", "query_ts", "show_progress", "verbose", "conn", "session")
+            name for name in ("self", "query_ts", "show_progress", "verbose", "conn", "session", "service")
             if name in sig.parameters
         ]
 
