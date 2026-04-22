@@ -281,7 +281,7 @@ class Handler(ABC):
             total=total,
             desc=desc,
             dynamic_ncols=True,
-            leave=True,
+            leave=False,
             bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}]"
         )
         try:
