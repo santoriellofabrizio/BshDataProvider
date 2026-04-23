@@ -163,7 +163,6 @@ def test_bloomberg_daily_etf(api: BshData):
     assert df is not None
 
 
-
 def test_bloomberg_nav(api: BshData):
     print("\n========== TEST BLOOMBERG NAV ==========")
     nav = api.info.get_nav(id = ISIN_LIST, start='2025-12-11')
@@ -189,10 +188,12 @@ def test_bloomberg_swap(api: BshData):
     assert not df.empty
 
 
-
 def test_daily_etf(api: BshData, sample_isins):
-    prices = api.market.get_daily_etf(id=sample_isins[-20:],
-                             start="2026-02-01",
+    api.set_log_level('DEBUG')
+    api.enable_cache()
+    prices = api.market.get_daily_etf(id=sample_isins[:10],
+                             start="2026-04-20",
+                             end='2026-04-22',
                              source="bloomberg",
                              snapshot_time="17:00")
 

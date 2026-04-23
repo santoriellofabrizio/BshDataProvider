@@ -168,7 +168,7 @@ class IndexClassifier(BaseClassifier):
         if idu in df["FAMILY"].str.upper().values:
             # Tenor mancante -> warning + default 1D
             if not tenor:
-                logger.warning(f"Tenor missing for Index Family {idu}. Using default tenor '1D'.")
+                logger.info(f"Tenor missing for Index Family {idu}. Using default tenor '1D'.")
                 tenor = "1D"
 
             ten_u = tenor.upper()

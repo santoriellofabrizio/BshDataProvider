@@ -285,7 +285,7 @@ class FxForwardCarryComponent(Component):
         return rate_diffs
 
     def is_updatable(self) -> bool:
-        return True
+        return False
 
     @property
     def updatable_fields(self) -> set[str]:

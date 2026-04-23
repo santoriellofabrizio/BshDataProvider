@@ -70,6 +70,19 @@ class BaseRequest:
         field_part = ",".join(sorted(self.fields)) if isinstance(self.fields, list) else str(self.fields)
         self.request_id = f"{instr_id}:{field_part}"
 
+    def _get_instr_id(self) -> str:
+        """Helper per ottenere l'ID dello strumento in modo sicuro."""
+        if self.instrument and hasattr(self.instrument, 'id'):
+            return str(self.instrument.id) or "GENERAL"
+        return "GENERAL"
+
+
+    def __lt__(self, other):
+        """Consente il sorting basato sull'ID dello strumento."""
+        if not isinstance(other, BaseRequest):
+            return NotImplemented
+        return self._get_instr_id() < other._get_instr_id()
+
 # ============================================================
 # STATIC REQUEST (snapshot / semi-static)
 # ============================================================

@@ -14,6 +14,15 @@ class BaseFetcher:
         self.show_progress = show_progress
         self.holidays = HolidayManager()
 
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}()"
+
+    def __hash__(self) -> int:
+        return hash(self.__class__.__name__)
+
+    def __eq__(self, other) -> bool:
+        return type(self) is type(other)
+
     # ------------------------------------------------------------
     # Utility comuni
     # ------------------------------------------------------------

@@ -56,7 +56,7 @@ class InstrumentFactory(Singleton):
         Initializes only when first metadata lookup is needed.
         """
         if InstrumentFactory._classifier is None:
-            with self._lock:
+            # with self._lock:
                 # Double-check pattern
                 if InstrumentFactory._classifier is None:
                     client = InstrumentFactory._client or self._safe_init_client()
@@ -100,6 +100,8 @@ class InstrumentFactory(Singleton):
             Instrument instance
         """
         # --- resolve ID / ISIN / ticker ---
+        if id in self._instruments:
+            return self._instruments[id]
         isin, ticker, id = self._resolve_identifiers(id, isin, ticker)
 
         # --- infer type (triggers lazy classifier init if needed) ---

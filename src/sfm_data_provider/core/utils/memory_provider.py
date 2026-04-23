@@ -176,6 +176,10 @@ def _get_memory():
         _memory_provider = Memory(_cache_dir, verbose=0)
     return _memory_provider
 
+def set_verbosity(num: int):
+    mem = _get_memory()
+    mem._verbose = num
+
 
 def enable_cache():
     global ENABLE_CACHE
@@ -261,7 +265,7 @@ def cache_bsh_data(func=None, *, provider=None, category=None, readable_path=USE
     def decorator(func: Callable) -> Callable:
         sig = inspect.signature(func)
         ignore_list = [
-            name for name in ("self", "query_ts", "show_progress", "verbose", "conn", "session", "service")
+            name for name in ("self", "query_ts", "show_progress", "verbose", "conn", "session","service")
             if name in sig.parameters
         ]
 
@@ -277,39 +281,35 @@ def cache_bsh_data(func=None, *, provider=None, category=None, readable_path=USE
                 _metrics.record_db_query()
                 return func(*args, **kwargs)
 
-            # Thread-safe initialization
+            normalized = tuple(sorted(a) if isinstance(a, list) else a for a in args)
+
             with _lock:
                 if _cached_func is None:
-                    memory_provider = _get_memory()
-                    _cached_func = memory_provider.cache(func, ignore=ignore_list)
+                    _cached_func = _get_memory().cache(
+                        func,
+                        ignore=ignore_list,
+                        cache_validation_callback=lambda metadata: True,
+                    )
 
-            # Cache check + call under lock (joblib is not thread-safe)
             with _lock:
                 try:
-                    is_cached = _cached_func.check_call_in_cache(*args, **kwargs)
+                    is_cached = _cached_func.check_call_in_cache(*normalized, **kwargs)
                 except Exception:
                     is_cached = False
 
                 if is_cached:
                     _metrics.record_disk_hit()
                     logger.info(f"[DISK HIT] {func.__qualname__}")
-                    return _cached_func(*args, **kwargs)
+                    return _cached_func(*normalized, **kwargs)
 
-            # Cache miss: DB query runs WITHOUT lock (parallel I/O)
+            # Cache miss: esegui fuori dal lock
             _metrics.record_disk_miss()
             _metrics.record_db_query()
             logger.info(f"[DISK MISS] {func.__qualname__}")
-            result = func(*args, **kwargs)
 
-            # Store result in cache under lock
+            # Joblib esegue la funzione E salva il risultato in automatico
             with _lock:
-                try:
-                    _cached_func(*args, **kwargs)  # re-calls but now result is in DB connection cache / fast
-                except Exception as e:
-                    logger.warning(f"[CACHE STORE ERROR] {func.__qualname__}: {e}")
-
-            return result
-
+                return _cached_func(*normalized, **kwargs)
         return wrapper
 
     if func is None:

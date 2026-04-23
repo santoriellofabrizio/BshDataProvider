@@ -27,6 +27,15 @@ class QueryOracle:
         self.conn = oracle_connection
         logger.debug("QueryOracle initialized with active OracleConnection")
 
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}()"
+
+    def __hash__(self) -> int:
+        return hash(self.__class__.__name__)
+
+    def __eq__(self, other) -> bool:
+        return type(self) is type(other)
+
     # ===========================================================
     # HELPERS
     # ===========================================================

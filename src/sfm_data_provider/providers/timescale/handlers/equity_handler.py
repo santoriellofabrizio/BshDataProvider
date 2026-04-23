@@ -126,7 +126,7 @@ class EquityHandler(Handler):
             market = Market.get_timescale_segments()[market.upper()]
 
         snapshot_time = getattr(first, "snapshot_time", None) or time(17)
-        business_days = self.holiday_manager.get_business_days(first.start, first.end, market)
+        business_days = self.holiday_manager.get_business_days(first.start, first.end, segment)
 
         # Adatta workers al numero di giorni da processare
         workers = min(self.max_workers, len(business_days))
