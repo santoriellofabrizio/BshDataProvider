@@ -469,9 +469,21 @@ class InstrumentFactory(Singleton):
                 self._instruments[id_] = self.create(id=id_, autocomplete=True, **kwargs)
             return self._instruments[id_]
 
-    def get_many(self, ids: list[str]) -> dict[str, Instrument]:
-        """Batch get instruments"""
-        return {id_: self.get(id_) for id_ in ids}
+    def get_many(self, ids: list[str], max_workers: int = 16) -> dict[str, Instrument]:
+        """Batch get instruments in parallel. Strumenti già in cache non generano thread."""
+        if not ids:
+            return {}
+        missing = [id_ for id_ in ids if id_ not in self._instruments]
+        result = {id_: self._instruments[id_] for id_ in ids if id_ in self._instruments}
+        if not missing:
+            return result
+        from concurrent.futures import ThreadPoolExecutor
+        with ThreadPoolExecutor(max_workers=min(len(missing), max_workers)) as pool:
+            created = list(pool.map(
+                lambda id_: self.create(id=id_, autocomplete=True), missing
+            ))
+        result.update(zip(missing, created))
+        return result
 
     def clear_cache(self) -> None:
         """Clear internal cache (testing utility)"""

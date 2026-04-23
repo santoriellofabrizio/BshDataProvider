@@ -100,6 +100,20 @@ class BaseAPI:
     def build_instrument(self, *args, **kwargs) -> Instrument:
         return self.instrument_builder.create(*args, **kwargs)
 
+    def build_instruments(
+        self,
+        ids: list[str],
+        autocomplete: bool = False,
+        max_workers: int = 16,
+    ) -> list[Instrument]:
+        """Crea più strumenti in parallelo. Preserva l'ordine di `ids`."""
+        if not ids:
+            return []
+        from concurrent.futures import ThreadPoolExecutor
+        _build = lambda id_: self.instrument_builder.create(id=id_, autocomplete=autocomplete)
+        with ThreadPoolExecutor(max_workers=min(len(ids), max_workers)) as pool:
+            return list(pool.map(_build, ids))
+
     def _resolve_identifiers(
             self,
             id: Optional[Union[str, List[str]]] = None,
