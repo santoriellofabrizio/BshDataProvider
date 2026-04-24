@@ -107,31 +107,13 @@ class BaseAPI:
         max_workers: int = 16,
     ) -> list[Instrument]:
         """Crea più strumenti in parallelo con progress bar. Preserva l'ordine di `ids`."""
-        if not ids:
-            return []
-        import sys
-        import threading
-        from concurrent.futures import ThreadPoolExecutor
-
-        total = len(ids)
-        done = 0
-        lock = threading.Lock()
-
-        def _build(id_: str) -> Instrument:
-            nonlocal done
-            inst = self.instrument_builder.create(id=id_, autocomplete=autocomplete)
-            with lock:
-                done += 1
-                if sys.stdout.isatty():
-                    print(f"\rBuilding {done}/{total} | {'█' * (done * 20 // total):20} | {done / total:>4.0%}", end="", flush=True)
-            return inst
-
-        with ThreadPoolExecutor(max_workers=min(total, max_workers)) as pool:
-            result = list(pool.map(_build, ids))
-
-        if sys.stdout.isatty():
-            print()
-        return result
+        from sfm_data_provider.core.utils.common import parallel_map
+        return parallel_map(
+            lambda id_: self.instrument_builder.create(id=id_, autocomplete=autocomplete),
+            ids,
+            max_workers=max_workers,
+            label="Building",
+        )
 
     def _resolve_identifiers(
             self,
