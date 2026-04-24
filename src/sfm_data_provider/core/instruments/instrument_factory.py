@@ -1,8 +1,11 @@
 # bshdata/core/instruments/factory/instrument_factory.py
 
+import hashlib
 import logging
+import shutil
+from pathlib import Path
 from threading import Lock
-from typing import Optional, Type, Dict
+from typing import Optional, Type, Dict, List
 
 from sfm_data_provider.client import BSHDataClient
 from sfm_data_provider.core.enums.currencies import CurrencyEnum
@@ -492,6 +495,46 @@ class InstrumentFactory(Singleton):
         with self._lock:
             self._instruments.clear()
             logger.debug("Instrument cache cleared")
+
+    # ==================================================================
+    # DISK CACHE
+    # ==================================================================
+
+    def _disk_cache_path(self, ids: List[str], autocomplete: bool) -> Path:
+        from sfm_data_provider.core.utils.memory_provider import get_cache_dir
+        key = hashlib.md5(("|".join(sorted(ids)) + f"|{autocomplete}").encode()).hexdigest()[:16]
+        return Path(get_cache_dir()) / "instruments" / f"{key}.pkl"
+
+    def load_from_disk(self, ids: List[str], autocomplete: bool) -> Optional[List[Instrument]]:
+        """Carica una lista di strumenti dalla cache disco, None se assente o corrotta."""
+        import joblib
+        path = self._disk_cache_path(ids, autocomplete)
+        if not path.exists():
+            return None
+        try:
+            id_to_inst: Dict[str, Instrument] = joblib.load(path)
+            result = [id_to_inst[id_] for id_ in ids if id_ in id_to_inst]
+            return result if len(result) == len(ids) else None
+        except Exception:
+            return None
+
+    def save_to_disk(self, ids: List[str], result: List[Instrument], autocomplete: bool) -> None:
+        """Salva una lista di strumenti sulla cache disco."""
+        import joblib
+        path = self._disk_cache_path(ids, autocomplete)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            joblib.dump({inst.id: inst for inst in result}, path)
+        except Exception as e:
+            logger.debug(f"Instrument disk cache save failed: {e}")
+
+    def clear_disk_cache(self) -> None:
+        """Cancella la cache disco degli strumenti."""
+        from sfm_data_provider.core.utils.memory_provider import get_cache_dir
+        cache_dir = Path(get_cache_dir()) / "instruments"
+        if cache_dir.exists():
+            shutil.rmtree(cache_dir)
+            logger.info("Instrument disk cache cleared")
 
     # ==================================================================
     # CONFIGURATION

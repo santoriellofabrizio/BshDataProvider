@@ -207,6 +207,10 @@ def _print_cache_event(label: str, func_name: str) -> None:
         pass
 
 
+def get_cache_dir() -> str:
+    return _cache_dir
+
+
 def set_cache_dir(path: str):
     """Imposta directory cache custom"""
     global _cache_dir, _memory_provider
@@ -388,6 +392,7 @@ __all__ = [
     'enable_cache',
     'disable_cache',
     'set_cache_dir',
+    'get_cache_dir',
     'set_cache_verbose',
     'lru_cache_with_metrics',
     'get_metrics',
