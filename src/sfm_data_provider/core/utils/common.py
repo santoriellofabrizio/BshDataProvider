@@ -59,8 +59,10 @@ def parallel_map(fn, items, *, max_workers: int = 16, label: str = "Working") ->
         result = fn(item)
         with lock:
             done += 1
-            if sys.stdout.isatty():
+            try:
                 print(f"\r{label} {done}/{total} | {'█' * (done * 20 // total):20} | {done / total:>4.0%}", end="", flush=True)
+            except Exception as e:
+                pass
         return result
 
     with ThreadPoolExecutor(max_workers=min(total, max_workers)) as pool:
