@@ -47,16 +47,22 @@ class GeneralDataAPI(BaseAPI):
 
     def get_etp_isins(
             self, segments: Optional[List[str]] = None, currency: Optional[str] = None,
-            underlying: Optional[str] = None, source='oracle'
-    ):
+            underlying: Optional[str] = None, source='oracle', extra_fields: Optional[List[str]] = None,
+    ) -> Union[List, pd.DataFrame]:
         """Lista ISIN ETP attivi."""
         if not isinstance(segments, list):
             segments = [segments]
-        return self.get(["etp_isins"],
+        res = self.get(["etp_isins"],
                         segments=segments,
                         currency=currency,
                         source=source,
-                        underlying=underlying)["etp_isins"]
+                        underlying=underlying,
+                        extra_fields=extra_fields)["etp_isins"]
+        if extra_fields:
+            return pd.DataFrame.from_records(res).T
+        else:
+            return res
+
 
     def get_bond_isins(
             self,

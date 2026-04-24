@@ -201,8 +201,10 @@ def _print_cache_event(label: str, func_name: str) -> None:
     if not CACHE_VERBOSE:
         return
     msg = f"[{label}] {func_name}"
-    if sys.stdout.isatty():
+    try:
         print(f"\r{msg:<80}", end="", flush=True)
+    except Exception as e:
+        pass
 
 
 def set_cache_dir(path: str):

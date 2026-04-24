@@ -111,4 +111,15 @@ def test_more_than_1000_get_oracle_fx_composition(api: BshData):
     assert not df.empty, "DataFrame FX_COMPOSITION vuoto"
 
 
+def test_general_api(api: BshData):
+    etfs = api.general.get(
+        fields=["etp_isins"],
+        segments=["IM"],
+        currency="EUR",
+        underlying=["MONEY MARKET"],
+        source="oracle",
+        extra_fields=["CURRENCY"])["etf_isins"]
+
+    assert len(etfs) > 0, "No ETF data found"
+
 

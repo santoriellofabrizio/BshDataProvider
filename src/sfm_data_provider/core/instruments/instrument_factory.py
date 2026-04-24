@@ -102,6 +102,8 @@ class InstrumentFactory(Singleton):
         # --- resolve ID / ISIN / ticker ---
         isin, ticker, id = self._resolve_identifiers(id, isin, ticker)
 
+        if id in self._instruments:
+            return self._instruments[id]
         # --- infer type (triggers lazy classifier init if needed) ---
         if type is None:
             type = self.classifier.infer_type(isin or ticker or id)

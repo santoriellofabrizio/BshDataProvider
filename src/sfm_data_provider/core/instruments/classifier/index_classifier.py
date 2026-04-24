@@ -8,6 +8,7 @@ from .base_classifier import BaseClassifier
 
 logger = logging.getLogger(__name__)
 
+
 class IndexClassifier(BaseClassifier):
 
     # ---------------------------------------------
@@ -168,7 +169,7 @@ class IndexClassifier(BaseClassifier):
         if idu in df["FAMILY"].str.upper().values:
             # Tenor mancante -> warning + default 1D
             if not tenor:
-                logger.warning(f"Tenor missing for Index Family {idu}. Using default tenor '1D'.")
+                logger.info(f"Tenor missing for Index Family {idu}. Using default tenor '1D'.")
                 tenor = "1D"
 
             ten_u = tenor.upper()
@@ -189,8 +190,7 @@ class IndexClassifier(BaseClassifier):
                 tenor = self.extract_tenor(idu)
                 ticker = self.get_ticker(family, tenor)
                 return ticker
-
-
+            return None
 
     def has_family(self, idu: str) -> Optional[str]:
         df = self._load()
@@ -200,9 +200,11 @@ class IndexClassifier(BaseClassifier):
                 try_family = idu.replace(tnr, "")
                 if try_family in df["FAMILY"].unique():
                     return try_family
+        return None
 
     def extract_tenor(self, idu: str) -> Optional[str]:
         df = self._load()
         for tnr in df["TENOR"].unique():
             if tnr in idu:
                 return tnr
+        return None
