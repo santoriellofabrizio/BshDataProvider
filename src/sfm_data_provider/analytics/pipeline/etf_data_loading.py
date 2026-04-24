@@ -131,7 +131,7 @@ class EtfDataLoading:
     @property
     def prices(self) -> pd.DataFrame:
         if self._prices is None:
-            self._prices = self._fetch_prices()
+            self._prices = self._to_multiindex(self._fetch_prices(), "MID")
         return self._prices
 
     @property
@@ -151,17 +151,19 @@ class EtfDataLoading:
     @property
     def fx_prices(self) -> Optional[pd.DataFrame]:
         if self._fx_prices is None:
-            self._fx_prices = self._override_fx_prices or self._fetch_fx_prices(
+            raw = self._override_fx_prices or self._fetch_fx_prices(
                 self._currencies_from(self.fx_composition)
             )
+            self._fx_prices = self._to_multiindex(raw, "spot")
         return self._fx_prices
 
     @property
     def fx_forward_prices(self) -> Optional[pd.DataFrame]:
         if self._fx_forward_prices is None:
-            self._fx_forward_prices = self._override_fx_forward_prices or self._fetch_fx_forward_prices(
+            raw = self._override_fx_forward_prices or self._fetch_fx_forward_prices(
                 self._currencies_from(self.fx_forward_composition)
             )
+            self._fx_forward_prices = self._to_multiindex(raw, self.fx_forward_tenor)
         return self._fx_forward_prices
 
     @property
@@ -283,6 +285,18 @@ class EtfDataLoading:
         if composition is None:
             return []
         return [c for c in composition.columns.tolist() if c != "EUR"]
+
+    @staticmethod
+    def _to_multiindex(df: Optional[pd.DataFrame], field: str) -> Optional[pd.DataFrame]:
+        """Wrappa colonne flat in MultiIndex (field, id). No-op se già MultiIndex o None."""
+        if df is None or isinstance(df.columns, pd.MultiIndex):
+            return df
+        df = df.copy()
+        df.columns = pd.MultiIndex.from_tuples(
+            [(field, c) for c in df.columns],
+            names=["field", "id"],
+        )
+        return df
 
     # ============================================================
 
