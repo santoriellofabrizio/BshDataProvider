@@ -106,13 +106,32 @@ class BaseAPI:
         autocomplete: bool = False,
         max_workers: int = 16,
     ) -> list[Instrument]:
-        """Crea più strumenti in parallelo. Preserva l'ordine di `ids`."""
+        """Crea più strumenti in parallelo con progress bar. Preserva l'ordine di `ids`."""
         if not ids:
             return []
+        import sys
+        import threading
         from concurrent.futures import ThreadPoolExecutor
-        _build = lambda id_: self.instrument_builder.create(id=id_, autocomplete=autocomplete)
-        with ThreadPoolExecutor(max_workers=min(len(ids), max_workers)) as pool:
-            return list(pool.map(_build, ids))
+
+        total = len(ids)
+        done = 0
+        lock = threading.Lock()
+
+        def _build(id_: str) -> Instrument:
+            nonlocal done
+            inst = self.instrument_builder.create(id=id_, autocomplete=autocomplete)
+            with lock:
+                done += 1
+                if sys.stdout.isatty():
+                    print(f"\rBuilding {done}/{total} | {'█' * (done * 20 // total):20} | {done / total:>4.0%}", end="", flush=True)
+            return inst
+
+        with ThreadPoolExecutor(max_workers=min(total, max_workers)) as pool:
+            result = list(pool.map(_build, ids))
+
+        if sys.stdout.isatty():
+            print()
+        return result
 
     def _resolve_identifiers(
             self,
