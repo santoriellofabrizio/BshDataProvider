@@ -581,14 +581,16 @@ class QueryOracle:
 
         # Query base senza currency
         query = f"""
-        SELECT BSH_ID, CURRENCY, WEIGHT, WEIGHT_FX_FORWARD, REF_DATE 
-        FROM {table_name} 
-        WHERE BSH_ID IN {placeholders[0]}
-          AND REF_DATE = (
-            SELECT MAX(REF_DATE) FROM {table_name}
+        SELECT BSH_ID, CURRENCY, WEIGHT, WEIGHT_FX_FORWARD, REF_DATE
+        FROM (
+            SELECT BSH_ID, CURRENCY, WEIGHT, WEIGHT_FX_FORWARD, REF_DATE,
+                   RANK() OVER (PARTITION BY BSH_ID ORDER BY REF_DATE DESC) as rnk
+            FROM {table_name}
             WHERE BSH_ID IN {placeholders[0]}
-            AND REF_DATE <= TO_DATE({placeholders[1]}, 'DD-MM-YYYY')
-          )
+              AND REF_DATE <= TO_DATE({placeholders[1]}, 'DD-MM-YYYY')
+              -- Se la currency è fornita, conviene filtrarla già qui per performance
+        ) 
+        WHERE rnk = 1
         """
 
         # Aggiungi filtro currency se fornito

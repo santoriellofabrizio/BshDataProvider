@@ -919,12 +919,13 @@ class MarketDataAPI(BaseAPI):
 
         result = self.get(type=InstrumentType.INDEX, id=id, start=start, end=end,
                           fields="PX_LAST", source=source, frequency="1d", request_type="historical", **extra_params)
-
+        if isinstance(result, pd.Series): result = result.to_frame()
         if isinstance(result, pd.DataFrame):
             result = result / 100.0  # % -> decimal
             if ccy_map:
                 result = result.rename(columns={t: c for t, c in ccy_map.items() if
                                                 any(t.replace(' INDEX', '') in str(col) for col in result.columns)})
+                result.columns = [getattr(c,'value', c) for c in result.columns]
         return result
 
     def get_daily_index(

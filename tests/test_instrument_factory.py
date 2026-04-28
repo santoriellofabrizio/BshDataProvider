@@ -87,6 +87,7 @@ def test_oracle_future_anagraphic(instrument_factory):
 def test_oracle_irs(instrument_factory):
     estron = instrument_factory.create("ESTRON", autocomplete=True)
     estr = instrument_factory.create("ESTR3M", autocomplete=True)
+    tona = instrument_factory.create("TONA", autocomplete=True)
 
 
 def test_credit_futures(instrument_factory):

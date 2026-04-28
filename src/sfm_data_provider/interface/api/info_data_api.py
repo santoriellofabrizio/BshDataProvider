@@ -260,7 +260,8 @@ class InfoDataAPI(BaseAPI):
         """
         # Mode 2: pre-built instruments
         if instruments is not None:
-            return self.get_with_instruments(instruments=instruments, **kwargs)
+            return self.get_with_instruments(instruments=instruments,fields=fields,market=market,
+                                             currency=currency, autocomplete=autocomplete, **kwargs)
         if isinstance(fields, str):
             fields = [fields]
 
@@ -385,7 +386,7 @@ class InfoDataAPI(BaseAPI):
             ticker: Optional[Union[str, List[str]]] = None,
             source: Union[str, List[str], Dict[str, str]] = "bloomberg",
             **kwargs
-    ):
+    ) -> pd.Series:
         """
         Restituisce il TER (Total Expense Ratio) degli ETF.
 
@@ -400,7 +401,7 @@ class InfoDataAPI(BaseAPI):
             fields="TER",
             request_type="reference",
             **kwargs
-        )
+        )["TER"]
 
     def get_dividends(
             self,

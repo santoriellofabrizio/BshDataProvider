@@ -48,12 +48,13 @@ class FXCompositionHandler(BulkFieldHandler):
 
 
     def process(self, requests: List[BulkRequest], query: QueryOracle) -> Dict[str, Dict[str, Any]]:
-            isins = tuple(sorted(r.instrument.isin for r in requests))  # hashable
-            first = requests[0]
-            reference_date = first.extra_params.get("reference_date") or date.today()
-            fx_fxfwrd = first.extra_params.get("fx_fxfwrd", "both")
 
-            return self._cached_get_etf_fx(isins, reference_date, fx_fxfwrd, query)
+        isins = tuple(sorted(r.instrument.isin for r in requests))  # hashable
+        first = requests[0]
+        reference_date = first.extra_params.get("reference_date") or date.today()
+        fx_fxfwrd = first.extra_params.get("fx_fxfwrd", "both")
+
+        return self._cached_get_etf_fx(isins, reference_date, fx_fxfwrd, query)
 
     @cache_bsh_data
     def _cached_get_etf_fx(self, isins: tuple, day: date, fx_fxfwrd: str, query: QueryOracle):

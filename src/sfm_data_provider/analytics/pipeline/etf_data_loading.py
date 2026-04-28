@@ -21,15 +21,20 @@ Typical usage:
 """
 
 import logging
+from collections import defaultdict
 from datetime import date, datetime, time
-from typing import Optional, Union, List
+from typing import Optional, Union, List, Literal
 
 import pandas as pd
+
+from sfm_data_provider.core.enums.instrument_types import InstrumentType
+from sfm_data_provider.core.instruments.instruments import Instrument
+from sfm_data_provider.interface.bshdata import BshData
 
 logger = logging.getLogger(__name__)
 
 
-class EtfDataLoading:
+class DataPipeline:
     """
     Layer di data loading per ETF. Ogni dataset è lazy: viene scaricato
     solo quando acceduto per la prima volta (o dopo un override).
@@ -42,22 +47,19 @@ class EtfDataLoading:
         start: Union[str, date, datetime],
         end: Union[str, date, datetime],
         frequency: str = "daily",
-        snapshot_time: time = time(17, 0),
-        intraday_start_time: time = time(9, 0),
-        intraday_end_time: time = time(17, 30),
+        snapshot_time: time = time(17),
         fx_forward_tenor: str = "1M",
         etf_source: str = "timescale",
         fx_source: str = "timescale",
         fx_forward_source: str = "bloomberg",
         etf_fallbacks: Optional[List[dict]] = None,
     ):
-        self.api = api
+
+        self.api: BshData = api
         self.start = start
         self.end = end
         self.frequency = frequency
         self.snapshot_time = snapshot_time
-        self.intraday_start_time = intraday_start_time
-        self.intraday_end_time = intraday_end_time
         self.fx_forward_tenor = fx_forward_tenor
         self.etf_source = etf_source
         self.fx_source = fx_source
@@ -69,7 +71,11 @@ class EtfDataLoading:
             self.instrument_ids = [inst.id for inst in instruments]
         else:
             self.instrument_ids = list(instruments)
-            self.instrument_objects = None
+            self.instrument_objects = self.api.market.build_instruments(self.instrument_ids, autocomplete=True)
+
+        self.instruments_by_type = defaultdict(list)
+        for inst in self.instrument_objects:
+            self.instruments_by_type[inst.type].append(inst)
 
         # Overrides (impostati prima dell'accesso alle property)
         self._override_ter: Optional[dict] = None
@@ -78,6 +84,7 @@ class EtfDataLoading:
         self._override_dividends: Optional[pd.DataFrame] = None
         self._override_fx_prices: Optional[pd.DataFrame] = None
         self._override_fx_forward_prices: Optional[pd.DataFrame] = None
+        self._override_ytm: Optional[pd.DataFrame] = None
 
         # Lazy cache interno
         self._prices: Optional[pd.DataFrame] = None
@@ -87,39 +94,46 @@ class EtfDataLoading:
         self._fx_forward_prices: Optional[pd.DataFrame] = None
         self._dividends: Optional[pd.DataFrame] = None
         self._ter: Optional[dict] = None
+        self._repo: Optional[pd.DataFrame] = None
+        self._ytm: Optional[pd.DataFrame] = None
 
     # ============================================================
     # OVERRIDE (chainable, invalidano il dato lazy corrispondente)
     # ============================================================
 
-    def override_ter(self, ter: dict) -> "EtfDataLoading":
+    def override_ter(self, ter: dict) -> "DataPipeline":
         self._override_ter = ter
         self._ter = None
         return self
 
-    def override_fx_composition(self, df: pd.DataFrame) -> "EtfDataLoading":
+    def override_ytm(self, ytm: pd.DataFrame) -> "DataPipeline":
+        self._override_ytm = ytm
+        self._ytm = None
+        return self
+
+    def override_fx_composition(self, df: pd.DataFrame) -> "DataPipeline":
         self._override_fx_composition = df
         self._fx_composition = None
         self._fx_prices = None  # le valute necessarie possono cambiare
         return self
 
-    def override_fx_forward_composition(self, df: pd.DataFrame) -> "EtfDataLoading":
+    def override_fx_forward_composition(self, df: pd.DataFrame) -> "DataPipeline":
         self._override_fx_forward_composition = df
         self._fx_forward_composition = None
         self._fx_forward_prices = None
         return self
 
-    def override_dividends(self, df: pd.DataFrame) -> "EtfDataLoading":
+    def override_dividends(self, df: pd.DataFrame) -> "DataPipeline":
         self._override_dividends = df
         self._dividends = None
         return self
 
-    def override_fx_prices(self, df: pd.DataFrame) -> "EtfDataLoading":
+    def override_fx_prices(self, df: pd.DataFrame) -> "DataPipeline":
         self._override_fx_prices = df
         self._fx_prices = None
         return self
 
-    def override_fx_forward_prices(self, df: pd.DataFrame) -> "EtfDataLoading":
+    def override_fx_forward_prices(self, df: pd.DataFrame) -> "DataPipeline":
         self._override_fx_forward_prices = df
         self._fx_forward_prices = None
         return self
@@ -131,8 +145,9 @@ class EtfDataLoading:
     @property
     def prices(self) -> pd.DataFrame:
         if self._prices is None:
-            self._prices = self._to_multiindex(self._fetch_prices(), "MID")
+            self._prices = self._fetch_prices()
         return self._prices
+
 
     @property
     def fx_composition(self) -> Optional[pd.DataFrame]:
@@ -154,6 +169,9 @@ class EtfDataLoading:
             raw = self._override_fx_prices or self._fetch_fx_prices(
                 self._currencies_from(self.fx_composition)
             )
+            if raw is None:
+                raw = pd.DataFrame(1, columns=['EUR'], index=self.prices.index)
+            if isinstance(raw, pd.Series): raw = raw.to_frame()
             self._fx_prices = self._to_multiindex(raw, "spot")
         return self._fx_prices
 
@@ -163,31 +181,56 @@ class EtfDataLoading:
             raw = self._override_fx_forward_prices or self._fetch_fx_forward_prices(
                 self._currencies_from(self.fx_forward_composition)
             )
+            if isinstance(raw, pd.Series): raw = raw.to_frame()
             self._fx_forward_prices = self._to_multiindex(raw, self.fx_forward_tenor)
         return self._fx_forward_prices
 
     @property
+    def ytm(self) -> Optional[pd.DataFrame]:
+        if self._ytm is None:
+            raw = self._override_ytm or self._fetch_ytm(
+            )
+            self._ytm = raw
+        return self._ytm
+
+    @property
     def dividends(self) -> Optional[pd.DataFrame]:
         if self._dividends is None:
+            ids = [i.id for i in self.instrument_objects if i.type in (InstrumentType.ETP, InstrumentType.STOCK)]
             self._dividends = self._override_dividends or self.api.info.get_dividends(
-                id=self.instrument_ids, start=self.start, end=self.end
+                id=ids, start=self.start, end=self.end
             )
         return self._dividends
 
     @property
-    def ter(self) -> Optional[dict]:
+    def ter(self) -> Optional[pd.Series]:
         if self._ter is None:
-            base = self.api.info.get_ter(id=self.instrument_ids) or {}
+            ids = [i.id for i in self.instrument_objects if i.type == InstrumentType.ETP]
+            base = self.api.info.get_ter(id=ids)
             if self._override_ter:
                 base.update(self._override_ter)
             self._ter = base
         return self._ter
 
+    @property
+    def repo(self) -> Optional[pd.DataFrame]:
+        if self._repo is None:
+            ccys = [i.currency.value for i in self.instrument_objects if i.type == InstrumentType.FUTURE]
+            ids = [i.id for i in self.instrument_objects if i.type == InstrumentType.FUTURE]
+            self._repo = self.api.market.get_daily_repo_rates(self.start, self.end, currencies=ccys, ids=ids)
+        return self._repo
+
+    def get_instruments(self, mode: Literal['dict','list'] = 'dict'):
+        if mode == 'dict':
+            return {i.id: i for i in self.instrument_objects}
+        else:
+            return self.instrument_objects
+
     # ============================================================
     # EAGER LOAD
     # ============================================================
 
-    def load_all(self) -> "EtfDataLoading":
+    def load_all(self) -> "DataPipeline":
         """Scarica tutti i dataset in sequenza. Ritorna self per chaining."""
         _ = self.prices
         _ = self.fx_composition
@@ -196,6 +239,8 @@ class EtfDataLoading:
         _ = self.fx_forward_prices
         _ = self.dividends
         _ = self.ter
+        _ = self.ytm
+        _ = self.repo
         return self
 
     # ============================================================
@@ -204,15 +249,41 @@ class EtfDataLoading:
 
     def _fetch_prices(self) -> pd.DataFrame:
         if self.frequency.lower() in ("daily", "1d"):
-            return self.api.market.get_daily_etf(
-                id=self.instrument_ids,
-                start=self.start,
-                end=self.end,
-                snapshot_time=self.snapshot_time,
-                source=self.etf_source,
-                fallbacks=self.etf_fallbacks,
-            )
+            return self._fetch_daily_prices()
         return self._fetch_intraday_prices()
+
+    def _fetch_daily_prices(self) -> pd.DataFrame:
+        prices = []
+        for type, instruments in self.instruments_by_type.items():
+            match type:
+                case InstrumentType.ETP | InstrumentType.FUTURE:
+                    prices.append(self.api.market.get(
+                        instruments=instruments,
+                        start=self.start,
+                        end=self.end,
+                        fields='mid',
+                        market="EUREX" if type == InstrumentType.FUTURE else "EURONEXT",
+                        snapshot_time=self.snapshot_time,
+                        source='timescale',
+                        fallbacks=[{"source": "bloomberg"}]
+                    ))
+                case InstrumentType.CDXINDEX | InstrumentType.STOCK | InstrumentType.SWAP:
+                    prices.append(self.api.market.get(
+                        instruments=instruments,
+                        start=self.start,
+                        end=self.end,
+                        fields='mid',
+                        snapshot_time=self.snapshot_time,
+                        source='bloomberg'
+                    ))
+                case InstrumentType.INDEX:
+                    prices.append(self.api.market.get(
+                        instruments=instruments,
+                        start=self.start,
+                        end=self.end,
+                        fields='px_last',
+                        source='bloomberg'))
+        return pd.concat(prices, axis=1)
 
     def _fetch_intraday_prices(self) -> pd.DataFrame:
         dates = pd.date_range(
@@ -227,8 +298,8 @@ class EtfDataLoading:
                     date=d.date(),
                     id=self.instrument_ids,
                     frequency=self.frequency,
-                    start_time=self.intraday_start_time,
-                    end_time=self.intraday_end_time,
+                    start_time=time(9),
+                    end_time=time(17,30),
                     source=self.etf_source,
                 )
                 if df is not None and not df.empty:
@@ -241,22 +312,34 @@ class EtfDataLoading:
 
     def _fetch_fx_composition(self) -> Optional[pd.DataFrame]:
         try:
-            data = self.api.info.get_currency_exposure(id=self.instrument_ids)
+            ids = [i.id for i in self.instruments_by_type[InstrumentType.ETP]]
+            data = self.api.info.get_fx_composition(id=ids)
             if data is not None:
-                return data.pivot(index="index", columns="CURRENCY", values="WEIGHT").fillna(0)
+                return data
         except Exception as e:
             logger.warning(f"FX composition fetch failed: {e}")
         return None
 
     def _fetch_fx_forward_composition(self) -> Optional[pd.DataFrame]:
         try:
-            data = self.api.info.get_currency_exposure(id=self.instrument_ids)
+            ids = [i.id for i in self.instruments_by_type[InstrumentType.ETP]]
+            data = self.api.info.get_fx_composition(id=ids)
             if data is not None:
-                return data.pivot(
-                    index="index", columns="CURRENCY", values="WEIGHT_FX_FORWARD"
-                ).fillna(0)
+                return data
         except Exception as e:
             logger.warning(f"FX forward composition fetch failed: {e}")
+        return None
+
+    def _fetch_ytm(self):
+
+        fixed_income = [i for i in self.instrument_objects
+                        if getattr(i, 'underlying_type', None) in ["FIXED INCOME", "MONEY MARKET"]]
+
+        if fixed_income:
+            return self.api.info.get_etp_fields(
+                fields='ytm', instruments=fixed_income, source="timescale",
+                start=self.start, end=self.end,
+            )
         return None
 
     def _fetch_fx_prices(self, currencies: List[str]) -> Optional[pd.DataFrame]:
@@ -267,6 +350,7 @@ class EtfDataLoading:
             start=self.start,
             end=self.end,
             source=self.fx_source,
+            fallbacks=[{'source': 'bloomberg'}],
         )
 
     def _fetch_fx_forward_prices(self, currencies: List[str]) -> Optional[pd.DataFrame]:
@@ -280,11 +364,13 @@ class EtfDataLoading:
             source=self.fx_forward_source,
         )
 
-    @staticmethod
-    def _currencies_from(composition: Optional[pd.DataFrame]) -> List[str]:
+    def _currencies_from(self, composition: Optional[pd.DataFrame]) -> List[str]:
         if composition is None:
             return []
-        return [c for c in composition.columns.tolist() if c != "EUR"]
+        for i in self.instrument_ids:
+            if i in composition.index:
+                return [c for c in composition.columns.tolist() if c != "EUR"]
+        return [c for c in composition.index.tolist() if c != "EUR"]
 
     @staticmethod
     def _to_multiindex(df: Optional[pd.DataFrame], field: str) -> Optional[pd.DataFrame]:
@@ -303,7 +389,7 @@ class EtfDataLoading:
     def __repr__(self) -> str:
         loaded = []
         for name in ("prices", "fx_composition", "fx_forward_composition",
-                     "fx_prices", "fx_forward_prices", "dividends", "ter"):
+                     "fx_prices", "fx_forward_prices", "dividends", "ter", "ytm"):
             if getattr(self, f"_{name}") is not None:
                 loaded.append(name)
         status = ", ".join(loaded) if loaded else "nothing loaded yet"

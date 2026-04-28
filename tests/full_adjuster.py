@@ -3,12 +3,9 @@ import pandas as pd
 from datetime import time, date
 from matplotlib import pyplot as plt
 
+from sfm_data_provider.analytics.adjustments import Adjuster, TerComponent, FxSpotComponent, FxForwardCarryComponent, \
+    DividendComponent
 # Import dai tuoi moduli specifici
-from sfm_data_provider.analytics.adjustments.dividend import DividendComponent
-from sfm_data_provider.analytics.adjustments.fx_forward_carry import FxForwardCarryComponent
-from sfm_data_provider.analytics.adjustments.fx_spot import FxSpotComponent
-from sfm_data_provider.analytics.adjustments.ter import TerComponent
-from sfm_data_provider.analytics.adjustments.adjuster import Adjuster
 from sfm_data_provider.interface.bshdata import BshData
 
 
@@ -17,9 +14,8 @@ def full_test():
     # IUSA (S&P 500 UCITS ETF USD) vs IUSE (S&P 500 EUR Hedged)
     ticker = ['IUSA', 'IUSE']
     currencies = ['USD']
-    start_date = '2025-09-10'
-    end_date = '2026-03-01'
-    ref_date = date(2026, 3, 2)
+    start_date = '2026-02-10'
+    end_date = '2026-04-20'
 
     # Inizializzazione API con config locale
     config_path = r'C:\AFMachineLearning\Libraries\SFMDataProvider\config\bshdata_config.yaml'
@@ -29,10 +25,10 @@ def full_test():
     ter = api.info.get_ter(ticker=ticker) / 100
 
     fx_composition = api.info.get_fx_composition(
-        ticker=ticker, fx_fxfwrd='fx', reference_date=ref_date
+        ticker=ticker, fx_fxfwrd='fx'
     )
     fx_forward_info = api.info.get_fx_composition(
-        ticker=ticker, fx_fxfwrd="fxfwrd", reference_date=ref_date
+        ticker=ticker, fx_fxfwrd="fxfwrd"
     )
 
     # --- 3. RECUPERO DATI DI MERCATO (DAILY) ---
@@ -65,6 +61,7 @@ def full_test():
         .add(FxForwardCarryComponent(fx_forward_info, fx_forward_prices, "1M", fx_prices))
         .add(DividendComponent(dividends, prices, fx_prices=fx_prices))
     )
+
 
     # --- 5. ANALISI DEI RENDIMENTI (ALPHA & BETA) ---
     clean_returns = adjuster.get_clean_returns().dropna() * 10000

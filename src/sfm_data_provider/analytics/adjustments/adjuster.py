@@ -156,7 +156,7 @@ class Adjuster:
             (t3 - t2) * 1e3, (t4 - t3) * 1e3,
             (t4 - t0) * 1e3,
         )
-        return cleaned
+        return cleaned.iloc[1:]
 
     def append_update(self, timestamp: pd.Timestamp = None,
                       prices: Optional[pd.Series] = None,

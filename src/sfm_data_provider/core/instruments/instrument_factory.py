@@ -112,10 +112,6 @@ class InstrumentFactory(Singleton):
             type = self.classifier.infer_type(isin or ticker or id)
         if isinstance(type, str):
             type = InstrumentType.from_str(type)
-
-        instrument: Optional[Instrument] = None
-
-        # --- dispatch ---
         match type:
             case InstrumentType.FUTURE:
                 instrument = self._build_future(id, isin, ticker, currency, autocomplete, **kwargs)
@@ -138,15 +134,17 @@ class InstrumentFactory(Singleton):
             case InstrumentType.STOCK:
                 instrument = self._build_stock(id, isin, ticker, currency, autocomplete, **kwargs)
 
-            case InstrumentType.INDEX:
-                instrument = self._build_index(id, ticker, autocomplete, currency=currency, **kwargs)
-
             case InstrumentType.FXFWD:
                 instrument = self._build_fx_forward(id=id, ticker=ticker, autocomplete=autocomplete, **kwargs)
+
+            case InstrumentType.INDEX:
+                instrument = self._build_index(id, ticker, autocomplete, currency=currency, **kwargs)
 
             case _:
                 cls: Type[Instrument] = InstrumentRegistry.get_class(type)
                 instrument = cls(type=type, ticker=ticker, isin=isin, id=id, currency=currency)
+
+        # --- dispatch ---
 
         self.register(instrument)
         return instrument
