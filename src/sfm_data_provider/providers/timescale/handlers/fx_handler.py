@@ -11,7 +11,6 @@ class FXHandler(Handler):
     def can_handle(self, req):
         return req.instrument.type.upper() == "CURRENCYPAIR"
 
-
     def process(self, requests, query: QueryTimeScale):
         first = requests[0]
         is_daily = "d" in str(first.frequency).lower()

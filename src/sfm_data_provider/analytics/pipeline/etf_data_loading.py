@@ -286,29 +286,41 @@ class DataPipeline:
         return pd.concat(prices, axis=1)
 
     def _fetch_intraday_prices(self) -> pd.DataFrame:
-        dates = pd.date_range(
-            pd.to_datetime(self.start).date(),
-            pd.to_datetime(self.end).date(),
-            freq="B",
-        )
-        frames = []
-        for d in dates:
-            try:
-                df = self.api.market.get_intraday_etf(
-                    date=d.date(),
-                    id=self.instrument_ids,
-                    frequency=self.frequency,
-                    start_time=time(9),
-                    end_time=time(17,30),
-                    source=self.etf_source,
-                )
-                if df is not None and not df.empty:
-                    frames.append(df)
-            except Exception as e:
-                logger.warning(f"Intraday load failed {d.date()}: {e}")
-        if not frames:
-            raise ValueError("No intraday prices loaded")
-        return pd.concat(frames).sort_index()
+
+        prices = []
+        for type, instruments in self.instruments_by_type.items():
+            match type:
+                case InstrumentType.ETP | InstrumentType.FUTURE:
+                    prices.append(self.api.market.get(
+                        instruments=instruments,
+                        start=self.start,
+                        end=self.end,
+                        start_time=time(9,30),
+                        end_time=time(17,),
+                        frequency=self.frequency,
+                        fields='mid',
+                        market="EUREX" if type == InstrumentType.FUTURE else "EURONEXT",
+                        source='timescale',
+                    ))
+                case InstrumentType.CDXINDEX | InstrumentType.STOCK | InstrumentType.SWAP:
+                    raise ValueError("avoid stupid blooomberg downloads!")
+                    prices.append(self.api.market.get(
+                        instruments=instruments,
+                        start=self.start,
+                        end=self.end,
+                        fields='mid',
+                        frequency=self.frequency,
+                        source='bloomberg'
+                    ))
+                case InstrumentType.INDEX:
+                    prices.append(self.api.market.get(
+                        instruments=instruments,
+                        start=self.start,
+                        end=self.end,
+                        fields='px_last',
+                        source='bloomberg'))
+                    #todo oversample
+        return pd.concat(prices, axis=1)
 
     def _fetch_fx_composition(self) -> Optional[pd.DataFrame]:
         try:

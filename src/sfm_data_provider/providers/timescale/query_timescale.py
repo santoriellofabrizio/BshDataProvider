@@ -241,6 +241,8 @@ class QueryTimeScale:
         seconds_sampling: int,
         segment: Optional[str] = None
     ):
+        if market is None:
+            raise ValueError("market cannot be None")
         date_start = date.strftime("%Y-%m-%d")
         date_end = (date + dt.timedelta(days=1)).strftime("%Y-%m-%d")
         query = f'''

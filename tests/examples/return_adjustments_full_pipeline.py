@@ -27,8 +27,8 @@ from sfm_data_provider.interface.bshdata import BshData
 # --- Config ---
 IDS = ["IITB", "FBTP"]
 START, END = "2026-01-01", "2026-03-01"
-SNAPSHOT_TIME = time(15)
-FREQUENCY = "1D"
+SNAPSHOT_TIME = None #time(15)
+FREQUENCY = "3h"
 ALPHA_SIGNIFICANCE = 0.05
 
 # --- Fixtures ---
