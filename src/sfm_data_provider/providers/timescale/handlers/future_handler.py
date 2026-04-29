@@ -1,3 +1,5 @@
+from datetime import time
+
 import pandas as pd
 from sfm_data_provider.providers.timescale.handlers.base_handlers import Handler
 from sfm_data_provider.providers.timescale.handlers.handlers_utils import _freq_to_seconds, _build_results, _normalize_dataframe

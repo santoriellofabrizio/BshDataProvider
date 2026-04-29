@@ -64,7 +64,8 @@ class EquityHandler(Handler):
             print(f"Error fetching data for {dt}: {e}")
             return None
 
-    def _fetch_single_day_intraday(self, query, current_day, market, currency, subs, sec, segment):
+    def _fetch_single_day_intraday(self, query, current_day, market, currency, subs, sec, segment,
+                                    start_time, end_time):
         """
         Fetch intraday data for a single date.
 
@@ -76,6 +77,8 @@ class EquityHandler(Handler):
             subs: Tuple of subscriptions/ISINs
             sec: Sampling seconds
             segment: Market segment
+            start_time: First bar time (inclusive)
+            end_time: Last bar time (inclusive)
 
         Returns:
             DataFrame with data for the date or None
@@ -87,6 +90,8 @@ class EquityHandler(Handler):
                 currency=currency,
                 isin=subs,
                 seconds_sampling=sec,
+                start_time=start_time,
+                end_time=end_time,
                 segment=segment,
             )
 
