@@ -209,9 +209,7 @@ class MockEtfEquityPriceEngine:
             Adjuster(etf_prices_daily, instruments=instruments)
             .add(TerComponent(ter.to_dict()))
             .add(FxSpotComponent(fx_composition, fx_prices_daily))
-            .add(FxForwardCarryComponent(
-                fx_forward_composition, fx_forward_prices, "1M", fx_prices_daily
-            ))
+            .add(FxForwardCarryComponent(fx_forward_composition, fx_forward_prices, "1M", fx_prices_daily))
             .add(DividendComponent(
                 dividends_daily, etf_prices_daily, fx_prices=fx_prices_daily
             ))

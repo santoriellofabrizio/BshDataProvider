@@ -293,12 +293,8 @@ class TestFxForwardCarryPerformance:
 
     @pytest.fixture
     def component(self, composition, fx_fwd, fx_spot, return_calculator):
-        c = FxForwardCarryComponent(
-            fwd_composition=composition,
-            fx_forward_prices=fx_fwd,
-            tenor="1M",
-            fx_spot_prices=fx_spot,
-        )
+        c = FxForwardCarryComponent(fwd_composition=composition, fx_forward_points=fx_fwd, tenor="1M",
+                                    fx_spot_prices=fx_spot)
         c.set_return_calculator(return_calculator)
         return c
 
@@ -396,12 +392,8 @@ class TestAdjusterDailyPerformance:
         ters = {isin: rng.uniform(0.0001, 0.005) for isin in instruments}
         adj.add(TerComponent(ters))
         adj.add(FxSpotComponent(fx_composition=composition, fx_prices=fx_spot))
-        adj.add(FxForwardCarryComponent(
-            fwd_composition=composition,
-            fx_forward_prices=fx_fwd,
-            tenor="1M",
-            fx_spot_prices=fx_spot,
-        ))
+        adj.add(FxForwardCarryComponent(fwd_composition=composition, fx_forward_points=fx_fwd, tenor="1M",
+                                        fx_spot_prices=fx_spot))
         adj.add(DividendComponent(
             dividends=dividends,
             instrument_prices=prices,
@@ -459,12 +451,8 @@ class TestLiveUpdatePerformance:
         ters = {isin: rng.uniform(0.0001, 0.005) for isin in instruments}
         adj.add(TerComponent(ters))
         adj.add(FxSpotComponent(fx_composition=composition, fx_prices=fx_spot))
-        adj.add(FxForwardCarryComponent(
-            fwd_composition=composition,
-            fx_forward_prices=fx_fwd,
-            tenor="1M",
-            fx_spot_prices=fx_spot,
-        ))
+        adj.add(FxForwardCarryComponent(fwd_composition=composition, fx_forward_points=fx_fwd, tenor="1M",
+                                        fx_spot_prices=fx_spot))
         # Warm up component caches with historical data before live ticks
         adj.get_clean_returns()
         return adj
@@ -543,12 +531,8 @@ class TestAppendUpdatePerformance:
         ters = {isin: rng.uniform(0.0001, 0.005) for isin in instruments}
         adj.add(TerComponent(ters))
         adj.add(FxSpotComponent(fx_composition=composition, fx_prices=fx_spot))
-        adj.add(FxForwardCarryComponent(
-            fwd_composition=composition,
-            fx_forward_prices=fx_fwd,
-            tenor="1M",
-            fx_spot_prices=fx_spot,
-        ))
+        adj.add(FxForwardCarryComponent(fwd_composition=composition, fx_forward_points=fx_fwd, tenor="1M",
+                                        fx_spot_prices=fx_spot))
         # Warm up component caches before appending new data
         adj.get_clean_returns()
         return adj

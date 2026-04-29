@@ -54,6 +54,10 @@ def test_trades(api, sample_isins):
     assert res is not None
     assert not res.empty, "Expected non-empty is_intraday DataFrame"
 
+def test_ytm(api, sample_isins):
+
+    res = api.info.get(type='FUTURE', id='FBTP', start="2026-01-20", end="2026-01-30", fields='ytm', source='timescale')
+
 
 def test_timescale_multi_intraday_best_sampled(api, sample_isins):
     """Single is_intraday ETF request (1m best sampled)."""

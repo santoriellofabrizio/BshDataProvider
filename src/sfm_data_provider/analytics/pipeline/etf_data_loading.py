@@ -172,7 +172,7 @@ class DataPipeline:
             if raw is None:
                 raw = pd.DataFrame(1, columns=['EUR'], index=self.prices.index)
             if isinstance(raw, pd.Series): raw = raw.to_frame()
-            self._fx_prices = self._to_multiindex(raw, "spot")
+            self._fx_prices = raw
         return self._fx_prices
 
     @property
@@ -182,7 +182,7 @@ class DataPipeline:
                 self._currencies_from(self.fx_forward_composition)
             )
             if isinstance(raw, pd.Series): raw = raw.to_frame()
-            self._fx_forward_prices = self._to_multiindex(raw, self.fx_forward_tenor)
+            self._fx_forward_prices = raw
         return self._fx_forward_prices
 
     @property
@@ -313,7 +313,7 @@ class DataPipeline:
     def _fetch_fx_composition(self) -> Optional[pd.DataFrame]:
         try:
             ids = [i.id for i in self.instruments_by_type[InstrumentType.ETP]]
-            data = self.api.info.get_fx_composition(id=ids)
+            data = self.api.info.get_fx_composition(id=ids, fx_fxfwrd='fx')
             if data is not None:
                 return data
         except Exception as e:
@@ -323,7 +323,7 @@ class DataPipeline:
     def _fetch_fx_forward_composition(self) -> Optional[pd.DataFrame]:
         try:
             ids = [i.id for i in self.instruments_by_type[InstrumentType.ETP]]
-            data = self.api.info.get_fx_composition(id=ids)
+            data = self.api.info.get_fx_composition(id=ids, fx_fxfwrd='fxfwrd')
             if data is not None:
                 return data
         except Exception as e:

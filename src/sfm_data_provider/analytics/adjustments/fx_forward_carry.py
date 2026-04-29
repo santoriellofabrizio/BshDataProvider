@@ -1,7 +1,7 @@
 """
 FX Forward carry adjustment component.
 
-Formula: rate_diff = (fwd - spot) / spot
+Formula: rate_diff = fwd_points / spot
 carry_adjustment = Σ(rate_diff[ccy] × weight[ccy] × year_fraction) - rate_diff[trading_ccy] × year_fraction
 Carry applied as midnight event.
 """
@@ -29,7 +29,7 @@ class FxForwardCarryComponent(Component):
     def __init__(
         self,
         fwd_composition: pd.DataFrame,
-        fx_forward_prices: pd.DataFrame,
+        fx_forward_points: pd.DataFrame,
         tenor: str,
         fx_spot_prices: pd.DataFrame,
         settlement_days: int = 2,
@@ -40,7 +40,7 @@ class FxForwardCarryComponent(Component):
         self.tenor = tenor
         self.settlement_days = settlement_days
 
-        fx_fwd_normalized = self._normalize_fx_columns(fx_forward_prices, "forward")
+        fx_fwd_normalized = self._normalize_fx_columns(fx_forward_points, "forward")
         self.fx_forward_prices = self._transform_fx_forward_prices(fx_fwd_normalized, tenor)
         self.fx_spot_prices = self._normalize_fx_columns(fx_spot_prices, "spot")
 
@@ -196,7 +196,7 @@ class FxForwardCarryComponent(Component):
 
         annualization_factor = 12 / months
         fx_fwd_annualized = fx_fwd_prices * annualization_factor
-        fx_fwd_decimal = fx_fwd_annualized / 10000.0
+        fx_fwd_decimal = fx_fwd_annualized
 
         all_values = pd.to_numeric(fx_fwd_decimal.values.flatten(), errors='coerce')
         all_values = all_values[~np.isnan(all_values) & (all_values != 0)]
