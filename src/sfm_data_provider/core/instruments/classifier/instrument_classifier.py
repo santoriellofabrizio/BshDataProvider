@@ -48,11 +48,11 @@ class InstrumentClassifier:
         if self.cds.matches(identifier):
             return InstrumentType.CDXINDEX
 
-        if self.index.matches(identifier):
-            return InstrumentType.INDEX
-
         if self.fx_forward.matches(identifier):
             return InstrumentType.FXFWD
+
+        if self.index.matches(identifier):
+            return InstrumentType.INDEX
 
         return InstrumentType.STOCK
 

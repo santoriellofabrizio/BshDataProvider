@@ -3,7 +3,7 @@ from abc import ABC, abstractmethod
 from datetime import datetime
 from functools import partial
 from pathlib import Path
-from typing import Callable, Optional, Dict, Any, Union
+from typing import Callable, Optional, Dict, Any, Union, Literal
 
 from ruamel.yaml import YAML
 
@@ -395,14 +395,41 @@ def get_active_future(inst, current_date) -> str:
     return f"{inst.id}{exp_code}"
 
 
-def get_active_timescale_future(ts_root, current_date) -> str:
+from datetime import datetime, date, timedelta
+
+
+def get_n_friday(year, month, n_of_friday: int = 3):
+    """Calcola il terzo venerdì di un dato mese e anno."""
+    # Partiamo dal primo giorno del mese
+    first_day = date(year, month, 1)
+    # Calcoliamo quanto manca al primo venerdì (venerdì = 4 in weekday())
+    # (4 - first_day.weekday() + 7) % 7
+    first_friday = first_day + timedelta(days=(4 - first_day.weekday() + 7) % 7)
+    # Il terzo venerdì è 14 giorni dopo il primo
+    return first_friday + timedelta(days=7 * (n_of_friday - 1))
+
+
+def get_active_timescale_future(ts_root, current_date, rolling: Literal['first-friday', 'third-friday']) -> str:
     if isinstance(current_date, datetime):
         current_date = current_date.date()
-    month = ((current_date.month - 1) // 3 + 1) * 3
+
     year = current_date.year
-    if month > 12:
-        month -= 12
-        year += 1
+    # Identifica il mese di scadenza del trimestre attuale (3, 6, 9, 12)
+    month = ((current_date.month - 1) // 3 + 1) * 3
+
+    # Calcola la data esatta della scadenza per il trimestre corrente
+    if rolling == f'first-friday':
+        expiry_date = get_n_friday(year, month, 1)
+    else:
+        expiry_date = get_n_friday(year, month, 3)
+
+    # Se oggi è DOPO il terzo venerdì del mese di scadenza, passa al trimestre dopo
+    if current_date >= expiry_date:
+        month += 3
+        if month > 12:
+            month -= 12
+            year += 1
+
     exp_code = f"{year}{month:02d}"
     return f"{ts_root}{exp_code}"
 

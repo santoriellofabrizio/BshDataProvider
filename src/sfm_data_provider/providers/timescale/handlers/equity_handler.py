@@ -187,6 +187,8 @@ class EquityHandler(Handler):
         # INTRADAY - PARALLELIZZATO
         # --------------------------------------------------------------
         sec = _freq_to_seconds(first.frequency)
+        intraday_start = first.extra_params.get("start_time") or time(9, 0)
+        intraday_end = first.extra_params.get("end_time") or time(17, 30)
         rows = []
 
         with self.progress(
@@ -199,7 +201,8 @@ class EquityHandler(Handler):
                 future_to_date = {
                     executor.submit(
                         self._fetch_single_day_intraday,
-                        query, current_day, market, currency, subs, sec, segment
+                        query, current_day, market, currency, subs, sec, segment,
+                        intraday_start, intraday_end,
                     ): current_day
                     for current_day in business_days
                 }

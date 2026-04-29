@@ -31,6 +31,7 @@ from typing import Union, Optional, List, Dict, Any
 
 from sfm_data_provider.core.decorators.respect_cache_status import respect_cache_kwarg
 from sfm_data_provider.core.enums.instrument_types import InstrumentType
+from sfm_data_provider.core.instruments.instruments import FxForwardInstrument
 from sfm_data_provider.core.requests.request_builder.request_builder import RequestBuilder
 from sfm_data_provider.core.utils.common import normalize_list, normalize_param
 from sfm_data_provider.core.utils.merge_utils import merge_incomplete_results
@@ -283,15 +284,16 @@ class MarketDataAPI(BaseAPI):
         # Create mock instruments with IDs for normalize_param
         class _InitInstrument:
             def __init__(self, id_): self.id = id_
+
         init_instruments = [_InitInstrument(id_) for id_ in ids]
 
         currency = normalize_param(currency, init_instruments, default="EUR")
         market = normalize_param(market, init_instruments, default=None)
         type_ = normalize_param(type, init_instruments, default=None)
 
-        start = self._parse_datetime(start) if isinstance(start, (datetime, str)) else\
+        start = self._parse_datetime(start) if isinstance(start, (datetime, str)) else \
             datetime.combine(self._parse_date(start), datetime.min.time())
-        end = self._parse_datetime(end) if isinstance(end, (datetime, str)) else\
+        end = self._parse_datetime(end) if isinstance(end, (datetime, str)) else \
             datetime.combine(self._parse_date(end), datetime.max.time())
 
         # Separate instrument-building params from request params
@@ -340,7 +342,7 @@ class MarketDataAPI(BaseAPI):
             end: Union[dt.date, datetime],
             fallbacks: Optional[List[Dict[str, Any]]],
             subscription: Union[str, List[str], Dict[str, str]] = None,
-            market: Union[str, List[str], Dict[str, str]]= None,
+            market: Union[str, List[str], Dict[str, str]] = None,
             **extra_params,
     ):
 
@@ -378,39 +380,6 @@ class MarketDataAPI(BaseAPI):
         result = self._dispatch(**dispatch_params, fallbacks=fallbacks)
         return self._as_datetime_index(self._aggregate(result).sort_index())
 
-    def get_fx_forward_prices(self,
-                              quoted_currency: list[str] | str,
-                              start,
-                              base_currency: list[str] | str = "EUR",
-                              tenor: int | str = "1M",
-                              end: str | datetime = today(),
-                              snapshot_time: time | str = time(17)):
-
-        if isinstance(quoted_currency, str):
-            quoted_currency = [quoted_currency]
-        if isinstance(base_currency, str):
-            base_currency = [base_currency]
-        n = len(quoted_currency)
-        quoted_currency = normalize_list(quoted_currency, n)
-        base_currency = normalize_list(base_currency, n)
-
-        for b,q in zip(base_currency, quoted_currency):
-            if b == q: base_currency.remove(b); quoted_currency.remove(q)
-
-        ids = [f"{b}{q} {tenor}" for b, q in zip(base_currency, quoted_currency)]
-        quoted_currency = {id: q for id, q in zip(ids, quoted_currency)}
-        base_currency = {id: b for id, b in zip(ids, base_currency)}
-        return self.get(type=InstrumentType.FXFWD,
-                        id=ids,
-                        base_currency=base_currency,
-                        quoted_currency=quoted_currency,
-                        start=start,
-                        frequency="1d",
-                        source="bloomberg",
-                        end=end,
-                        tenor=tenor,
-                        snapshot_time=snapshot_time)
-
     def get_intraday(
             self,
             start: Union[dt.date, datetime, str],
@@ -446,9 +415,9 @@ class MarketDataAPI(BaseAPI):
             pd.Series | pd.DataFrame: Time-series data for the specified period.
         """
         # Parse start and end (handles date/datetime/str)
-        start_parsed = self._parse_datetime(start) if isinstance(start, (datetime, str)) else\
+        start_parsed = self._parse_datetime(start) if isinstance(start, (datetime, str)) else \
             datetime.combine(self._parse_date(start), datetime.min.time())
-        end_parsed = self._parse_datetime(end) if isinstance(end, (datetime, str)) else\
+        end_parsed = self._parse_datetime(end) if isinstance(end, (datetime, str)) else \
             datetime.combine(self._parse_date(end), datetime.max.time())
 
         # Convert to ISO format strings for the request
@@ -919,12 +888,13 @@ class MarketDataAPI(BaseAPI):
 
         result = self.get(type=InstrumentType.INDEX, id=id, start=start, end=end,
                           fields="PX_LAST", source=source, frequency="1d", request_type="historical", **extra_params)
-
+        if isinstance(result, pd.Series): result = result.to_frame()
         if isinstance(result, pd.DataFrame):
             result = result / 100.0  # % -> decimal
             if ccy_map:
                 result = result.rename(columns={t: c for t, c in ccy_map.items() if
                                                 any(t.replace(' INDEX', '') in str(col) for col in result.columns)})
+                result.columns = [getattr(c, 'value', c) for c in result.columns]
         return result
 
     def get_daily_index(
@@ -936,7 +906,7 @@ class MarketDataAPI(BaseAPI):
             **extra_params,
     ) -> pd.DataFrame:
         return self.get(type=InstrumentType.INDEX, ticker=ticker, start=start, end=end, subscription=ticker,
-                          fields="PX_LAST", source=source, frequency="1d", request_type="historical", **extra_params)
+                        fields="PX_LAST", source=source, frequency="1d", request_type="historical", **extra_params)
 
     def get_daily_fx_forward(self, start: Union[dt.date, str],
                              end: Union[dt.date, str] = today(),
@@ -946,6 +916,7 @@ class MarketDataAPI(BaseAPI):
                              fields: Union[str, List[str]] = "MID",
                              source: str = "bloomberg",
                              tenor: Optional[Union[str, List[str]]] = "1M",
+                             adjust_by_factor: bool = True,
                              **extra_params):
 
         if not id and not quoted_currency:
@@ -959,23 +930,46 @@ class MarketDataAPI(BaseAPI):
             if b == q: base_currency.remove(b); quoted_currency.remove(q);
 
         if not id:
-            id = [f"{b}{q} {tenor}" for b,q in zip(base_currency, quoted_currency)]
+            id = [f"{b}{q} {tenor}" for b, q in zip(base_currency, quoted_currency)]
+
+        req = [RequestBuilder.build_static_request(fields=["FWD_SCALE"],
+                                                   source='bloomberg',
+                                                   instrument=
+                                                   FxForwardInstrument(id=i, tenor=t, base_currency=b,
+                                                                       quoted_currency=c),
+                                                   request_type="reference") for i, t, b, c in
+               zip(id, tenor, base_currency, quoted_currency)]
+        fwd_scale = self.client.send(req)
 
         quoted_currency = {i: q for i, q in zip(id, quoted_currency)}
         base_currency = {i: b for i, b in zip(id, base_currency)}
 
-        return self.get(type=InstrumentType.FXFWD,
-                        id=id,
-                        start=start,
-                        end=end,
-                        base_currency=base_currency,
-                        quoted_currency=quoted_currency,
-                        fields=fields,
-                        source=source,
-                        frequency="1d",
-                        request_type="historical",
-                        tenor=tenor,
-                        **extra_params)
+        if isinstance(fields, str): fields = [fields]
+
+        raw = self.get(type=InstrumentType.FXFWD,
+                       id=id,
+                       start=start,
+                       end=end,
+                       base_currency=base_currency,
+                       quoted_currency=quoted_currency,
+                       fields=fields,
+                       source=source,
+                       frequency="1d",
+                       request_type="historical",
+                       tenor=tenor,
+                       **extra_params)
+
+        if isinstance(raw, pd.Series): raw = raw.to_frame()
+        if not adjust_by_factor:
+            return raw
+
+        factors = {
+            c: (10 ** fwd_scale.get(c, {}).get("FWD_SCALE"))
+            for c in raw.columns
+        }
+
+        # Applichiamo il calcolo in modo vettorializzato
+        return raw.div(factors)
 
     def _as_datetime_index(self, df: pd.DataFrame) -> pd.DataFrame:
         try:
@@ -984,5 +978,3 @@ class MarketDataAPI(BaseAPI):
             pass
         finally:
             return df
-
-

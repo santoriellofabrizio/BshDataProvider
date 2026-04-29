@@ -10,6 +10,8 @@ def _freq_to_seconds(freq: str) -> int:
         return int(freq[:-1]) * 60
     if freq.endswith("s"):
         return int(freq[:-1])
+    if freq.endswith("h"):
+        return int(freq[:-1]) * 60 * 60
     raise ValueError(f"Unsupported frequency: {freq}")
 
 
@@ -80,7 +82,8 @@ def _build_results(
     results: dict[str, dict[str, dict]] = {}
 
     # ref_index SOLO per daily (per intraday non serve)
-    ref_index = pd.DatetimeIndex(business_days) if is_daily else None
+    ref_index = business_days if is_daily else (df["TIMESTAMP"] if not df.empty else [fstart, fend])
+    ref_index = pd.DatetimeIndex(ref_index)
 
     # Cicla ogni request (instrument)
     for req in requests:
@@ -130,7 +133,7 @@ def _build_results(
                 # Intraday: usa SOLO i timestamp effettivi dai dati (NO reindex!)
                 results[req.instrument.id] = {
                     f: (
-                        pd.Series(sub_df[f].values, index=idx)
+                        pd.Series(sub_df[f].values, index=idx.sort_values())
                         .loc[fstart:fend]
                         .groupby(level=0)
                         .mean()

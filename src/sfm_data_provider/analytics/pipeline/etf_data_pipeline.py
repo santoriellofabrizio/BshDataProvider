@@ -440,12 +440,8 @@ class EtfDataPipeline:
                 self._fx_forward_prices is not None and
                 self._fx_forward_composition is not None and
                 self._fx_prices is not None):
-            self._adjuster.add(FxForwardCarryComponent(
-                self._fx_forward_composition,
-                self._fx_forward_prices,
-                self.config.fx_forward_tenor,
-                self._fx_prices,
-            ))
+            self._adjuster.add(FxForwardCarryComponent(self._fx_forward_composition, self._fx_forward_prices,
+                                                       self.config.fx_forward_tenor, self._fx_prices))
             logger.debug("Added FxForwardCarryComponent")
 
         if self.config.adjust_dividends and self._dividends is not None:

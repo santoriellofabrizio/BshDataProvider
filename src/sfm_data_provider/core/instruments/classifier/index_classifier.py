@@ -8,6 +8,7 @@ from .base_classifier import BaseClassifier
 
 logger = logging.getLogger(__name__)
 
+
 class IndexClassifier(BaseClassifier):
 
     # ---------------------------------------------

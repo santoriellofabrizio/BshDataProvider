@@ -100,6 +100,28 @@ class BaseAPI:
     def build_instrument(self, *args, **kwargs) -> Instrument:
         return self.instrument_builder.create(*args, **kwargs)
 
+    def build_instruments(
+        self,
+        ids: list[str],
+        autocomplete: bool = False,
+        max_workers: int = 16,
+    ) -> list[Instrument]:
+        """Crea più strumenti in parallelo con progress bar. Usa cache disco su re-run."""
+        if not ids:
+            return []
+        cached = self.instrument_builder.load_from_disk(ids, autocomplete)
+        if cached is not None:
+            return cached
+        from sfm_data_provider.core.utils.common import parallel_map
+        result = parallel_map(
+            lambda id_: self.instrument_builder.create(id=id_, autocomplete=autocomplete),
+            ids,
+            max_workers=max_workers,
+            label="Building",
+        )
+        self.instrument_builder.save_to_disk(ids, result, autocomplete)
+        return result
+
     def _resolve_identifiers(
             self,
             id: Optional[Union[str, List[str]]] = None,

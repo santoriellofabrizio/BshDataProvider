@@ -20,7 +20,8 @@ class YTMHandler(Handler):
                 case InstrumentType.ETP:
                     out.update(self._process_etp(reqs, query))
                 case InstrumentType.FUTURE:
-                    out.update(self._process_future(reqs, query))
+                    raise NotImplementedError("For futures ytm. use api.info.get_future_ytm() [FETCHES FROM BLOOMBERG]")
+                #     out.update(self._process_future(reqs, query))
         return out
 
     def can_handle(self, req: BaseStaticRequest) -> bool:

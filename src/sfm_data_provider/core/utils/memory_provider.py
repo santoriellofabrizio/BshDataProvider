@@ -5,6 +5,7 @@ Compatibile con l'esistente, aggiunge funzionalità senza breaking changes
 import pandas as pd
 from joblib import Memory
 import os
+import sys
 import logging
 from functools import wraps, lru_cache
 import inspect
@@ -23,6 +24,7 @@ _cache_dir = os.path.join(os.path.dirname(__file__), "..", "..", "..", "cache")
 _memory_provider = None
 logger = logging.getLogger(__name__)
 ENABLE_CACHE = True
+CACHE_VERBOSE = True
 
 # Nuova configurazione
 USE_READABLE_PATHS = True  # Attiva path semantici invece di hash
@@ -189,6 +191,26 @@ def disable_cache():
     logger.info("Cache globally disabled")
 
 
+def set_cache_verbose(enabled: bool) -> None:
+    global CACHE_VERBOSE
+    CACHE_VERBOSE = enabled
+
+
+def _print_cache_event(label: str, func_name: str) -> None:
+    """Print inline su TTY, silenzioso su file redirect/pipe."""
+    if not CACHE_VERBOSE:
+        return
+    msg = f"[{label}] {func_name}"
+    try:
+        print(f"\r{msg:<80}", end="", flush=True)
+    except Exception as e:
+        pass
+
+
+def get_cache_dir() -> str:
+    return _cache_dir
+
+
 def set_cache_dir(path: str):
     """Imposta directory cache custom"""
     global _cache_dir, _memory_provider
@@ -273,17 +295,15 @@ def cache_bsh_data(func=None, *, provider=None, category=None, readable_path=USE
             nonlocal _cached_func
 
             if not ENABLE_CACHE:
-                logger.info(f"[CACHE DISABLED] {func.__qualname__}")
+                _print_cache_event("CACHE DISABLED", func.__qualname__)
                 _metrics.record_db_query()
                 return func(*args, **kwargs)
 
             # Thread-safe initialization
             with _lock:
                 if _cached_func is None:
-                    memory_provider = _get_memory()
-                    _cached_func = memory_provider.cache(func, ignore=ignore_list)
+                    _cached_func = _get_memory().cache(func, ignore=ignore_list)
 
-            # Cache check + call under lock (joblib is not thread-safe)
             with _lock:
                 try:
                     is_cached = _cached_func.check_call_in_cache(*args, **kwargs)
@@ -292,23 +312,18 @@ def cache_bsh_data(func=None, *, provider=None, category=None, readable_path=USE
 
                 if is_cached:
                     _metrics.record_disk_hit()
-                    logger.info(f"[DISK HIT] {func.__qualname__}")
+                    _print_cache_event("DISK HIT", func.__qualname__)
                     return _cached_func(*args, **kwargs)
 
-            # Cache miss: DB query runs WITHOUT lock (parallel I/O)
-            _metrics.record_disk_miss()
-            _metrics.record_db_query()
-            logger.info(f"[DISK MISS] {func.__qualname__}")
-            result = func(*args, **kwargs)
-
-            # Store result in cache under lock
-            with _lock:
+                # Cache miss: _cached_func chiama func E salva il risultato in una sola operazione
+                _metrics.record_disk_miss()
+                _metrics.record_db_query()
+                _print_cache_event("DISK MISS", func.__qualname__)
                 try:
-                    _cached_func(*args, **kwargs)  # re-calls but now result is in DB connection cache / fast
+                    return _cached_func(*args, **kwargs)
                 except Exception as e:
                     logger.warning(f"[CACHE STORE ERROR] {func.__qualname__}: {e}")
-
-            return result
+                    return func(*args, **kwargs)
 
         return wrapper
 
@@ -377,6 +392,8 @@ __all__ = [
     'enable_cache',
     'disable_cache',
     'set_cache_dir',
+    'get_cache_dir',
+    'set_cache_verbose',
     'lru_cache_with_metrics',
     'get_metrics',
     'cache_stats',

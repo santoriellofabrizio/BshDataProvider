@@ -296,7 +296,7 @@ class DataPipeline:
                         start=self.start,
                         end=self.end,
                         start_time=time(9,30),
-                        end_time=time(17),
+                        end_time=time(17,),
                         frequency=self.frequency,
                         fields='mid',
                         market="EUREX" if type == InstrumentType.FUTURE else "EURONEXT",
@@ -343,16 +343,24 @@ class DataPipeline:
         return None
 
     def _fetch_ytm(self):
+        ytm = []
+        for typ, instruments in self.instruments_by_type.items():
+            if typ == InstrumentType.ETP:
+                fixed_income = [i for i in instruments
+                                if getattr(i, 'underlying_type', None) in ["FIXED INCOME", "MONEY MARKET"]]
 
-        fixed_income = [i for i in self.instrument_objects
-                        if getattr(i, 'underlying_type', None) in ["FIXED INCOME", "MONEY MARKET"]]
+                if fixed_income:
+                    ytm.append(self.api.info.get_etp_fields(
+                        fields='ytm', instruments=fixed_income, source="timescale",
+                        start=self.start, end=self.end,
+                    ))
 
-        if fixed_income:
-            return self.api.info.get_etp_fields(
-                fields='ytm', instruments=fixed_income, source="timescale",
-                start=self.start, end=self.end,
-            )
-        return None
+            if typ == InstrumentType.FUTURE:
+                fixed_income = [i for i in instruments
+                                if getattr(i, 'future_underlying', None) in ["FIXED INCOME", "MONEY MARKET"]]
+                ytm.append(self.api.info.get_futures([i.id for i in fixed_income], start=self.start, end=self.end))
+
+        return pd.concat(ytm, axis=1)
 
     def _fetch_fx_prices(self, currencies: List[str]) -> Optional[pd.DataFrame]:
         if not currencies:

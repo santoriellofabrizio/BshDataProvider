@@ -239,10 +239,16 @@ class QueryTimeScale:
         market: str,
         isin: str,
         seconds_sampling: int,
+        start_time: dt.time = dt.time(9, 0),
+        end_time: dt.time = dt.time(17, 30),
         segment: Optional[str] = None
     ):
+        if market is None:
+            raise ValueError("market cannot be None")
         date_start = date.strftime("%Y-%m-%d")
         date_end = (date + dt.timedelta(days=1)).strftime("%Y-%m-%d")
+        start_ti = start_time.strftime("%H:%M:%S")
+        end_ti = end_time.strftime("%H:%M:%S")
         query = f'''
             select isin, "desc", tick + '{seconds_sampling} second' as datetime_sampled, bid_price, bid_qty, ask_price, ask_qty
             from (
@@ -253,7 +259,7 @@ class QueryTimeScale:
                     locf(last(b.ask_px_lev_0, b.datetime)) as ask_price,
                     locf(last(b.ask_qty_lev_0, b.datetime)) as ask_qty
                 FROM books b, "anatit" a
-                where b.datetime >= '{date_start}' 
+                where b.datetime >= '{date_start}'
                   and b.datetime < '{date_end}'
                   and b.id_strumento = a.id_strumento
                   and a.isin = '{isin}'
@@ -262,8 +268,8 @@ class QueryTimeScale:
                 group by tick, a.isin, a."desc"
                 order by a.isin, tick
             ) res
-            where res.tick::time + '{seconds_sampling} second'>= '09:00'
-              and res.tick::time + '{seconds_sampling} second' <= '17:30'
+            where res.tick::time + '{seconds_sampling} second' >= '{start_ti}'
+              and res.tick::time + '{seconds_sampling} second' <= '{end_ti}'
             order by isin, datetime_sampled
         '''
         return self._get_results(query, date)
@@ -273,17 +279,20 @@ class QueryTimeScale:
             self,
             date: dt.date,
             market: str,
-            isin: Union[str, Tuple[str, ...]],  # Usa Tuple invece di List
+            isin: Union[str, Tuple[str, ...]],
             seconds_sampling: int,
             currency: str = 'EUR',
+            start_time: dt.time = dt.time(9, 0),
+            end_time: dt.time = dt.time(17, 30),
             segment: Optional[str] = None
     ):
-        # Converti tuple in lista per l'elaborazione
         isins = [isin] if isinstance(isin, str) else list(isin)
         isin_list = ','.join(f"'{i}'" for i in isins)
         isin_filter = f"a.isin IN ({isin_list})"
         date_start = date.strftime("%Y-%m-%d")
         date_end = (date + dt.timedelta(days=1)).strftime("%Y-%m-%d")
+        start_ti = start_time.strftime("%H:%M:%S")
+        end_ti = end_time.strftime("%H:%M:%S")
         query = f'''
             select isin, "desc", tick + '{seconds_sampling} second' as datetime_sampled, bid_price, bid_qty, ask_price, ask_qty
             from (
@@ -294,7 +303,7 @@ class QueryTimeScale:
                     locf(last(b.ask_px_lev_0, b.datetime)) as ask_price,
                     locf(last(b.ask_qty_lev_0, b.datetime)) as ask_qty
                 FROM books b, "anatit" a
-                where b.datetime >= '{date_start}' 
+                where b.datetime >= '{date_start}'
                   and b.datetime < '{date_end}'
                   and b.id_strumento = a.id_strumento
                   and {isin_filter}
@@ -304,8 +313,8 @@ class QueryTimeScale:
                 group by tick, a.isin, a."desc"
                 order by a.isin, tick
             ) res
-            where res.tick::time + '{seconds_sampling} second'>= '09:00'
-              and res.tick::time + '{seconds_sampling} second' <= '17:30'
+            where res.tick::time + '{seconds_sampling} second' >= '{start_ti}'
+              and res.tick::time + '{seconds_sampling} second' <= '{end_ti}'
             order by isin, datetime_sampled
         '''
         return self._get_results(query, date)
@@ -317,26 +326,30 @@ class QueryTimeScale:
         date: dt.date,
         currency_pair: str,
         seconds_sampling: int,
+        start_time: dt.time = dt.time(9, 0),
+        end_time: dt.time = dt.time(17, 30),
         segment: Optional[str] = None
     ):
         date_start = date.strftime("%Y-%m-%d")
         date_end = (date + dt.timedelta(days=1)).strftime("%Y-%m-%d")
+        start_ti = start_time.strftime("%H:%M:%S")
+        end_ti = end_time.strftime("%H:%M:%S")
         query = f'''select currency_pair, tick + '{seconds_sampling} second' as datetime_sampled, bid_price, ask_price
                     from (
-                        select a.currency_pair as currency_pair, 
+                        select a.currency_pair as currency_pair,
                             time_bucket_gapfill('{seconds_sampling} second', fr.datetime) as tick,
                             locf(last(fr.bid, fr.datetime)) as bid_price,
                             locf(last(fr.ask, fr.datetime)) as ask_price
-                        FROM fx_rates fr join anafx a on fr.id_currency_pair = a.id_currency_pair 
-                        where fr.datetime >= '{date_start}' 
-                          and fr.datetime < '{date_end}' 
+                        FROM fx_rates fr join anafx a on fr.id_currency_pair = a.id_currency_pair
+                        where fr.datetime >= '{date_start}'
+                          and fr.datetime < '{date_end}'
                           and a.currency_pair = '{currency_pair}'
                           {f"AND a.segmento = '{segment}'" if segment else ""}
                         group by tick, a.currency_pair
                         order by a.currency_pair, tick
                     ) res
-                    where res.tick::time + '{seconds_sampling} second'>= '09:00'
-                      and res.tick::time + '{seconds_sampling} second' <= '17:30'
+                    where res.tick::time + '{seconds_sampling} second' >= '{start_ti}'
+                      and res.tick::time + '{seconds_sampling} second' <= '{end_ti}'
                     order by currency_pair, datetime_sampled'''
         return self._get_results(query, date)
 

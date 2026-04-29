@@ -41,6 +41,38 @@ def load_yaml(config_path: Optional[str]) -> dict:
     return {}
 
 
+def parallel_map(fn, items, *, max_workers: int = 16, label: str = "Working") -> list:
+    """Esegue fn in parallelo su items con progress bar su TTY."""
+    import sys
+    import threading
+    from concurrent.futures import ThreadPoolExecutor
+
+    total = len(items)
+    if not total:
+        return []
+
+    done = 0
+    lock = threading.Lock()
+
+    def _run(item):
+        nonlocal done
+        result = fn(item)
+        with lock:
+            done += 1
+            try:
+                print(f"\r{label} {done}/{total} | {'█' * (done * 20 // total):20} | {done / total:>4.0%}", end="", flush=True)
+            except Exception as e:
+                pass
+        return result
+
+    with ThreadPoolExecutor(max_workers=min(total, max_workers)) as pool:
+        result = list(pool.map(_run, items))
+
+    if sys.stdout.isatty():
+        print()
+    return result
+
+
 def normalize_list(value, n: int):
     """Rende qualsiasi input una lista lunga n."""
     if value is None:
