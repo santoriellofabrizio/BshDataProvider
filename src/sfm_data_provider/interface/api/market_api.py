@@ -424,23 +424,27 @@ class MarketDataAPI(BaseAPI):
             source: Optional[Union[str, List[str], Dict[str, str]]] = None,
             market: Optional[Union[str, List[str], Dict[str, str]]] = None,
             subscription: Optional[Union[str, List[str], Dict[str, str]]] = None,
+            start_time: Optional[time] = None,
+            end_time: Optional[time] = None,
             **extra_params,
     ):
         """
-        Generic is_intraday data wrapper for any instrument (tick/bar level).
+        Generic intraday data wrapper for any instrument (tick/bar level).
 
         Args:
-            start (date | datetime | str): Start date/time. If date, uses 00:00:00. If datetime, uses full timestamp.
-            end (date | datetime | str): End date/time. If date, uses 23:59:59. If datetime, uses full timestamp.
-            id: Optional[Union[str, List[str]]], optional): Instrument identifier.
-            isin: Optional[Union[str, List[str]]], optional): Instrument isin.
-            ticker: Optional[Union[str, List[str]]], optional): Instrument ticker.
+            start (date | datetime | str): Start date/time.
+            end (date | datetime | str): End date/time.
+            id: Instrument identifier.
+            isin: Instrument ISIN.
+            ticker: Instrument ticker.
             type (str): Instrument type ('ETP', 'FUTURE', etc.).
             frequency (str): Data frequency (e.g., '1m', '5m', '15m', '1h').
             fields (str | list[str]): Requested data fields.
             source (str | list[str] | dict[str, str]): Data source(s).
             market (str | list[str] | dict[str, str], optional): Market name(s).
             subscription (str | list[str] | dict[str, str], optional): Subscription identifier(s).
+            start_time (time, optional): First bar of each day (e.g. time(9, 0)). Defaults to 09:00.
+            end_time (time, optional): Last bar of each day (e.g. time(17, 30)). Defaults to 17:30.
 
         Returns:
             pd.Series | pd.DataFrame: Time-series data for the specified period.
@@ -454,6 +458,11 @@ class MarketDataAPI(BaseAPI):
         # Convert to ISO format strings for the request
         start_str = start_parsed.isoformat()
         end_str = end_parsed.isoformat()
+
+        if start_time is not None:
+            extra_params["start_time"] = self._parse_time(start_time)
+        if end_time is not None:
+            extra_params["end_time"] = self._parse_time(end_time)
 
         return self.get(
             type=type,
@@ -538,9 +547,11 @@ class MarketDataAPI(BaseAPI):
             fields: Union[str, List[str]] = "MID",
             source: Union[str, List[str], Dict[str, str]] = "timescale",
             market: Union[str, List[str], Dict[str, str]] = "ETFP",
+            start_time: Optional[time] = None,
+            end_time: Optional[time] = None,
             **extra_params,
     ):
-        """Dati is_intraday per ETF (ETP su ETFP di default). wraps get_intraday."""
+        """Intraday data for ETFs (ETP on ETFP by default). Wraps get_intraday."""
         if not end:
             end = dt.date.today()
         return self.get_intraday(
@@ -554,6 +565,8 @@ class MarketDataAPI(BaseAPI):
             fields=fields,
             source=source,
             market=market,
+            start_time=start_time,
+            end_time=end_time,
             **extra_params,
         )
 
@@ -568,9 +581,11 @@ class MarketDataAPI(BaseAPI):
             fields: Union[str, List[str]] = "MID",
             source: str = "timescale",
             market: Optional[str] = None,
+            start_time: Optional[time] = None,
+            end_time: Optional[time] = None,
             **extra_params,
     ):
-        """Dati is_intraday per Futures (EUREX se source=timescale e market non specificato). wraps get_intraday."""
+        """Intraday data for Futures (EUREX when source=timescale). Wraps get_intraday."""
         if source == "timescale" and market is None:
             market = "EUREX"
 
@@ -585,6 +600,8 @@ class MarketDataAPI(BaseAPI):
             fields=fields,
             source=source,
             market=market,
+            start_time=start_time,
+            end_time=end_time,
             **extra_params,
         )
 
@@ -598,9 +615,11 @@ class MarketDataAPI(BaseAPI):
             frequency: str = "1m",
             fields: Union[str, List[str]] = "MID",
             source: str = "timescale",
+            start_time: Optional[time] = None,
+            end_time: Optional[time] = None,
             **extra_params,
     ):
-        """Dati is_intraday per coppie FX. wraps get_intraday."""
+        """Intraday data for FX currency pairs. Wraps get_intraday."""
         return self.get_intraday(
             start=start,
             end=end,
@@ -611,6 +630,8 @@ class MarketDataAPI(BaseAPI):
             frequency=frequency,
             fields=fields,
             source=source,
+            start_time=start_time,
+            end_time=end_time,
             **extra_params,
         )
 
@@ -825,9 +846,11 @@ class MarketDataAPI(BaseAPI):
             frequency: str = "1m",
             fields: Union[str, List[str]] = "MID",
             source: str = "oracle",
+            start_time: Optional[time] = None,
+            end_time: Optional[time] = None,
             **extra_params,
     ):
-        """Dati is_intraday swap. Refer to Oracle anagraphic for ticker choice (e.g., EUZCISWAP10)."""
+        """Intraday swap data. Refer to Oracle anagraphic for ticker choice (e.g., EUZCISWAP10)."""
         return self.get_intraday(
             start=start,
             end=end,
@@ -837,6 +860,8 @@ class MarketDataAPI(BaseAPI):
             frequency=frequency,
             fields=fields,
             source=source,
+            start_time=start_time,
+            end_time=end_time,
             **extra_params)
 
     def get_intraday_cdx(
@@ -848,9 +873,11 @@ class MarketDataAPI(BaseAPI):
             frequency: str = "1m",
             fields: Union[str, List[str]] = "MID",
             source: str = "oracle",
+            start_time: Optional[time] = None,
+            end_time: Optional[time] = None,
             **extra_params,
     ):
-        """Dati is_intraday CDX. Refer to Oracle anagraphic for ticker choice."""
+        """Intraday CDX data. Refer to Oracle anagraphic for ticker choice."""
         return self.get_intraday(
             start=start,
             end=end,
@@ -860,6 +887,8 @@ class MarketDataAPI(BaseAPI):
             frequency=frequency,
             fields=fields,
             source=source,
+            start_time=start_time,
+            end_time=end_time,
             **extra_params)
 
     def get_daily_cdx(self,

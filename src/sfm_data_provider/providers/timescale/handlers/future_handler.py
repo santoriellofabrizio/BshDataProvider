@@ -1,3 +1,5 @@
+from datetime import time
+
 import pandas as pd
 from sfm_data_provider.providers.timescale.handlers.base_handlers import Handler
 from sfm_data_provider.providers.timescale.handlers.handlers_utils import _freq_to_seconds, _build_results, _normalize_dataframe
@@ -72,6 +74,8 @@ class FutureHandler(Handler):
         rows = []
 
         sec = _freq_to_seconds(first.frequency)
+        intraday_start = first.extra_params.get("start_time") or time(9, 0)
+        intraday_end = first.extra_params.get("end_time") or time(17, 30)
 
         for dt in days:
             for sub in subs:
@@ -80,6 +84,8 @@ class FutureHandler(Handler):
                     market=market,
                     isin=sub,
                     seconds_sampling=sec,
+                    start_time=intraday_start,
+                    end_time=intraday_end,
                 )
 
                 df = _normalize_dataframe(df)

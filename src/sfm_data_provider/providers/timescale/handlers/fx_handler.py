@@ -66,6 +66,8 @@ class FXHandler(Handler):
         # INTRADAY → ciclo sulle date, concat, normalize, build_results
         # ======================================================================
         sec = _freq_to_seconds(first.frequency)
+        intraday_start = first.extra_params.get("start_time") or time(9, 0)
+        intraday_end = first.extra_params.get("end_time") or time(17, 30)
         days = pd.date_range(first.start, first.end, freq="D")
         rows = []
 
@@ -75,6 +77,8 @@ class FXHandler(Handler):
                     date=dt.date(),
                     currency_pair=p,
                     seconds_sampling=sec,
+                    start_time=intraday_start,
+                    end_time=intraday_end,
                 )
 
                 df = _normalize_dataframe(df)
