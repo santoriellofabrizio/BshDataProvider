@@ -1,8 +1,11 @@
 # bshdata/core/instruments/factory/instrument_factory.py
 
+import hashlib
 import logging
+import shutil
+from pathlib import Path
 from threading import Lock
-from typing import Optional, Type, Dict
+from typing import Optional, Type, Dict, List
 
 from sfm_data_provider.client import BSHDataClient
 from sfm_data_provider.core.enums.currencies import CurrencyEnum
@@ -102,15 +105,13 @@ class InstrumentFactory(Singleton):
         # --- resolve ID / ISIN / ticker ---
         isin, ticker, id = self._resolve_identifiers(id, isin, ticker)
 
+        if id in self._instruments:
+            return self._instruments[id]
         # --- infer type (triggers lazy classifier init if needed) ---
         if type is None:
             type = self.classifier.infer_type(isin or ticker or id)
         if isinstance(type, str):
             type = InstrumentType.from_str(type)
-
-        instrument: Optional[Instrument] = None
-
-        # --- dispatch ---
         match type:
             case InstrumentType.FUTURE:
                 instrument = self._build_future(id, isin, ticker, currency, autocomplete, **kwargs)
@@ -133,15 +134,17 @@ class InstrumentFactory(Singleton):
             case InstrumentType.STOCK:
                 instrument = self._build_stock(id, isin, ticker, currency, autocomplete, **kwargs)
 
-            case InstrumentType.INDEX:
-                instrument = self._build_index(id, ticker, autocomplete, currency=currency, **kwargs)
-
             case InstrumentType.FXFWD:
                 instrument = self._build_fx_forward(id=id, ticker=ticker, autocomplete=autocomplete, **kwargs)
+
+            case InstrumentType.INDEX:
+                instrument = self._build_index(id, ticker, autocomplete, currency=currency, **kwargs)
 
             case _:
                 cls: Type[Instrument] = InstrumentRegistry.get_class(type)
                 instrument = cls(type=type, ticker=ticker, isin=isin, id=id, currency=currency)
+
+        # --- dispatch ---
 
         self.register(instrument)
         return instrument
@@ -469,15 +472,67 @@ class InstrumentFactory(Singleton):
                 self._instruments[id_] = self.create(id=id_, autocomplete=True, **kwargs)
             return self._instruments[id_]
 
-    def get_many(self, ids: list[str]) -> dict[str, Instrument]:
-        """Batch get instruments"""
-        return {id_: self.get(id_) for id_ in ids}
+    def get_many(self, ids: list[str], max_workers: int = 16) -> dict[str, Instrument]:
+        """Batch get instruments in parallel. Strumenti già in cache non generano thread."""
+        if not ids:
+            return {}
+        missing = [id_ for id_ in ids if id_ not in self._instruments]
+        result = {id_: self._instruments[id_] for id_ in ids if id_ in self._instruments}
+        if not missing:
+            return result
+        from concurrent.futures import ThreadPoolExecutor
+        with ThreadPoolExecutor(max_workers=min(len(missing), max_workers)) as pool:
+            created = list(pool.map(
+                lambda id_: self.create(id=id_, autocomplete=True), missing
+            ))
+        result.update(zip(missing, created))
+        return result
 
     def clear_cache(self) -> None:
         """Clear internal cache (testing utility)"""
         with self._lock:
             self._instruments.clear()
             logger.debug("Instrument cache cleared")
+
+    # ==================================================================
+    # DISK CACHE
+    # ==================================================================
+
+    def _disk_cache_path(self, ids: List[str], autocomplete: bool) -> Path:
+        from sfm_data_provider.core.utils.memory_provider import get_cache_dir
+        key = hashlib.md5(("|".join(sorted(ids)) + f"|{autocomplete}").encode()).hexdigest()[:16]
+        return Path(get_cache_dir()) / "instruments" / f"{key}.pkl"
+
+    def load_from_disk(self, ids: List[str], autocomplete: bool) -> Optional[List[Instrument]]:
+        """Carica una lista di strumenti dalla cache disco, None se assente o corrotta."""
+        import joblib
+        path = self._disk_cache_path(ids, autocomplete)
+        if not path.exists():
+            return None
+        try:
+            id_to_inst: Dict[str, Instrument] = joblib.load(path)
+            result = [id_to_inst[id_] for id_ in ids if id_ in id_to_inst]
+            return result if len(result) == len(ids) else None
+        except Exception:
+            return None
+
+    def save_to_disk(self, ids: List[str], result: List[Instrument], autocomplete: bool) -> None:
+        """Salva una lista di strumenti sulla cache disco."""
+        import joblib
+        path = self._disk_cache_path(ids, autocomplete)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            joblib.dump({inst.id: inst for inst in result}, path)
+        except Exception as e:
+            logger.debug(f"Instrument disk cache save failed: {e}")
+
+    def clear_disk_cache(self) -> None:
+        """Cancella la cache disco degli strumenti."""
+        from sfm_data_provider.core.utils.memory_provider import get_cache_dir
+        cache_dir = Path(get_cache_dir()) / "instruments"
+        if cache_dir.exists():
+            shutil.rmtree(cache_dir)
+            logger.info("Instrument disk cache cleared")
 
     # ==================================================================
     # CONFIGURATION

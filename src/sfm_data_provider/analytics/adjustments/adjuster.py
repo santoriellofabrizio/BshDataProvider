@@ -156,7 +156,7 @@ class Adjuster:
             (t3 - t2) * 1e3, (t4 - t3) * 1e3,
             (t4 - t0) * 1e3,
         )
-        return cleaned
+        return cleaned.iloc[1:]
 
     def append_update(self, timestamp: pd.Timestamp = None,
                       prices: Optional[pd.Series] = None,
@@ -192,41 +192,25 @@ class Adjuster:
         Yields:
             Self (Adjuster) to allow method calls within the context
         """
-        t0 = time.perf_counter()
+
         timestamp = pd.Timestamp.now() if self.intraday else pd.Timestamp.now().normalize()
         prices = add_time_tag(prices, timestamp)
         # Save current state: store length instead of copying the full DataFrame
         prices_len = len(self._prices)
         component_states = {id(c): c.save_state() for c in self.components if c.is_updatable()}
-        t1 = time.perf_counter()
-
         try:
             if prices is not None: # Apply temporary updates
                 prices = self._prepare_new_prices(prices)
-                # Live tick timestamp = pd.Timestamp.now() — always newest, no sort or
-                # value-dedup needed. drop_duplicates() on 800-col float DataFrames builds
-                # Python tuples per row and accounts for ~70–150ms of live_update latency.
                 self._prices = pd.concat([self._prices, prices])
-            t2 = time.perf_counter()
 
             self._update_components(timestamp, component_data, temp=True)
-            t3 = time.perf_counter()
-
-            logger.info(
-                "live_update setup — snapshot=%.1fms  prices_concat=%.1fms  update_components=%.1fms",
-                (t1 - t0) * 1e3, (t2 - t1) * 1e3, (t3 - t2) * 1e3,
-            )
-
             yield self
 
         finally:
-            t4 = time.perf_counter()
-            # Restore state: truncate instead of restoring a full copy
             self._prices = self._prices.iloc[:prices_len]
             for comp in self.components:
                 if id(comp) in component_states:
                     comp.restore_state(component_states[id(comp)])
-            logger.info("live_update restore — %.1fms", (time.perf_counter() - t4) * 1e3)
 
     def _update_components(self, timestamp: pd.Timestamp, component_data: dict, temp: bool = False):
         if not component_data:

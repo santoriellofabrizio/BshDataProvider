@@ -4,7 +4,7 @@ import sys
 from sfm_data_provider.client import BSHDataClient
 from sfm_data_provider.core.utils.addin_config_manager import AddinConfigManager
 from sfm_data_provider.core.utils.config_manager import ConfigManager
-from sfm_data_provider.core.utils.memory_provider import enable_cache, set_cache_dir, disable_cache
+from sfm_data_provider.core.utils.memory_provider import enable_cache, set_cache_dir, disable_cache, set_cache_verbose
 from sfm_data_provider.interface.api.general_data_api import GeneralDataAPI
 from sfm_data_provider.interface.api.info_data_api import InfoDataAPI
 from sfm_data_provider.interface.api.market_api import MarketDataAPI
@@ -48,6 +48,7 @@ class BshData:
     def __init__(self,
                  config_path: str | None = CONFIG_PATH,
                  cache=True,
+                 cache_verbose: bool = True,
                  log_level=None,
                  log_file=None,
                  log_level_file: str = None,
@@ -67,7 +68,8 @@ class BshData:
             log_file=log_file,
             log_level_file=log_level_file,
             autocomplete=autocomplete,
-            cache=cache
+            cache=cache,
+            cache_verbose=cache_verbose,
         )
         
         # Use config values (constructor args take precedence via get_api_config)
@@ -79,23 +81,23 @@ class BshData:
         warmup = api_config.warmup
         cache = api_config.cache
         cache_path = api_config.cache_path
+        cache_verbose = api_config.cache_verbose
 
         self._setup_logging(log_level, log_file=log_file, log_level_file=log_level_file)
-        self._setup_cache(cache, cache_path)
+        self._setup_cache(cache, cache_path, cache_verbose)
         self._setup_client(self._config_manager, autocomplete, warmup, **kwargs)
 
     # ============================================================
     # CACHE
     # ============================================================
-    def _setup_cache(self, enabled: bool, cache_path) -> None:
+    def _setup_cache(self, enabled: bool, cache_path, cache_verbose: bool = True) -> None:
         """Abilita o disabilita la cache globale."""
         if enabled:
             enable_cache()
             set_cache_dir(cache_path)
-            self.logger.debug("Cache abilitata. path: {}".format(cache_path))
         else:
             disable_cache()
-            self.logger.debug("Cache disabilitata.")
+        set_cache_verbose(cache_verbose)
 
     @staticmethod
     def enable_cache() -> None:

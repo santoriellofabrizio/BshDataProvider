@@ -10,8 +10,8 @@ import logging
 
 from sfm_data_provider.analytics.adjustments.component import Component
 from sfm_data_provider.analytics.adjustments.common import calculate_year_fractions
-from sfm_data_provider.analytics.adjustments import InstrumentProtocol
 from sfm_data_provider.core.enums.instrument_types import InstrumentType
+from sfm_data_provider.core.instruments.instruments import Instrument
 
 logger = logging.getLogger(__name__)
 
@@ -80,7 +80,7 @@ class CdxComponent(Component):
             f"{f', target={len(self.target)} instruments' if self.target else ''}"
         )
 
-    def is_applicable(self, instrument: InstrumentProtocol) -> bool:
+    def is_applicable(self, instrument: Instrument) -> bool:
         """
         Check applicability (domain logic only).
 
@@ -95,9 +95,8 @@ class CdxComponent(Component):
 
     def calculate_adjustment(
         self,
-        instruments: dict[str, InstrumentProtocol],
+        instruments: dict[str, Instrument],
         dates: Union[List[date], List[datetime]],
-        prices: pd.DataFrame,
     ) -> pd.DataFrame:
         """Calculate CDX carry adjustments."""
         # 1. Normalize dates to datetime (MANDATORY)

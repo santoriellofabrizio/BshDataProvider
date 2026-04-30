@@ -95,6 +95,12 @@ class RepoComponent(Component):
         if mode == 'currency' and future_currencies is None:
             raise ValueError("future_currencies required when mode='currency'")
 
+        if isinstance(repo_rates, pd.Series):
+            repo_rates = repo_rates.to_frame()
+
+        if isinstance(future_currencies, dict):
+            future_currencies = pd.Series(future_currencies)
+
         self.repo_rates = repo_rates.fillna(0.0)
         self.mode = mode
         self.future_currencies = future_currencies
@@ -148,7 +154,6 @@ class RepoComponent(Component):
         self,
         instruments: dict[str, Instrument],
         dates: Union[List[date], List[datetime]],
-        prices: pd.DataFrame,
     ) -> pd.DataFrame:
         """Calculate repo adjustments."""
         # 1. Normalize dates to datetime (MANDATORY)
@@ -257,7 +262,7 @@ class RepoComponent(Component):
                 f"mean repo impact: {mean_adj:.6f}"
             )
 
-        return result
+        return - result
 
     def __repr__(self) -> str:
         return (

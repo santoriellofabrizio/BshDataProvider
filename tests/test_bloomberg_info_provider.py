@@ -1,4 +1,6 @@
 # tests/test_bloomberg_provider_cases.py
+from datetime import date
+
 import pytest
 
 from sfm_data_provider.interface.bshdata import BshData
@@ -155,6 +157,13 @@ def test_bloomberg_dividends(api: BshData):
 
     assert dvd is not None
     assert not dvd.empty
+
+def test_future_ytm(api: BshData):
+    id = ["FBTP"]
+
+    ytm = api.info.get_future_ytm(id,date(2026,3,1), date(2026,3,10))
+
+    assert ytm is not None
 
 
 def test_bloomberg_nav(api: BshData):

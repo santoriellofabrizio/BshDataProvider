@@ -260,7 +260,8 @@ class InfoDataAPI(BaseAPI):
         """
         # Mode 2: pre-built instruments
         if instruments is not None:
-            return self.get_with_instruments(instruments=instruments, **kwargs)
+            return self.get_with_instruments(instruments=instruments,fields=fields,market=market,
+                                             currency=currency, autocomplete=autocomplete, **kwargs)
         if isinstance(fields, str):
             fields = [fields]
 
@@ -385,7 +386,7 @@ class InfoDataAPI(BaseAPI):
             ticker: Optional[Union[str, List[str]]] = None,
             source: Union[str, List[str], Dict[str, str]] = "bloomberg",
             **kwargs
-    ):
+    ) -> pd.Series:
         """
         Restituisce il TER (Total Expense Ratio) degli ETF.
 
@@ -400,7 +401,7 @@ class InfoDataAPI(BaseAPI):
             fields="TER",
             request_type="reference",
             **kwargs
-        )
+        )["TER"]
 
     def get_dividends(
             self,
@@ -603,6 +604,60 @@ class InfoDataAPI(BaseAPI):
             autocomplete,
             **extra_params
         )
+
+    def get_etf_ytm(
+            self,
+            id: Optional[Union[str, List[str]]] = None,
+            isin: Optional[Union[str, List[str]]] = None,
+            ticker: Optional[Union[str, List[str]]] = None,
+            source: Optional[Union[str, List[str], Dict[str, str]]] = "timescale",
+            currency: Union[str, List[str], Dict[str, str]] = "EUR",
+            subscriptions: Optional[Union[str, List[str], Dict[str, str]]] = None,
+            autocomplete: Optional[bool] = None,
+            **extra_params,
+    ):
+        """
+        Get ETP fields.
+
+        Supports dict mode for market, source, currency, subscriptions parameters (mapped by instrument ID).
+        """
+        return self.get(
+            type="ETP",
+            id=id,
+            isin=isin,
+            ticker=ticker,
+            source=source,
+            fields="YTM",
+            currency=currency,
+            subscriptions=subscriptions,
+            autocomplete=autocomplete,
+            **extra_params
+        )
+
+    def get_future_ytm(
+            self,
+            id: Union[str, List[str]],
+            start: date,
+            end: date,
+            **extra_params,
+    ):
+        """Get future YTM via CTD bond lookup. Returns DataFrame (rows=business days, cols=IDs)."""
+        b_days = HolidayManager().get_business_days(start, end, "EURONEXT")
+
+        ctd_mapping = self.get(
+            'FUTURE', id=id, fields="FUT_CTD_ISIN", source='bloomberg',
+            request_type="reference", autocomplete=True,
+        )["FUT_CTD_ISIN"].to_dict()
+
+        ctd_isins = list(c for c in ctd_mapping.values() if c)
+        ytm = self.get(
+            'BOND', id=ctd_isins, fields="YAS_BOND_YLD", source='bloomberg'
+                                                                '',
+            request_type="reference", autocomplete=True,
+            subscriptions=[f"{i} ISIN" for i in ctd_isins],
+        )
+        ytm.rename({v: k for k, v in ctd_mapping.items()}, inplace=True)
+        return pd.concat(ytm.T for _ in b_days).set_index(b_days) / 100
 
     def get_stock_fields(
             self,

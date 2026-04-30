@@ -31,6 +31,7 @@ class APIConfig:
     autocomplete: bool = True
     cache: bool = True
     cache_path: str = "cache"
+    cache_verbose: bool = True
     warmup: bool = False
 
     @classmethod

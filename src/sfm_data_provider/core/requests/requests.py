@@ -24,7 +24,6 @@ Each request automatically:
     - Validates source compatibility (e.g. ORACLE, BLOOMBERG, TIMESCALE)
 """
 
-
 from __future__ import annotations
 
 from dataclasses import dataclass, field, asdict
@@ -37,8 +36,9 @@ from sfm_data_provider.core.enums.fields import MarketField, StaticField
 from sfm_data_provider.core.enums.frequency import Frequency
 from sfm_data_provider.core.enums.markets import Market
 
-
 RequestType = Literal['general', 'historical', 'reference', 'intraday', 'daily', 'bulk']
+
+
 # ============================================================
 # BASE REQUEST (fundamentale)
 # ============================================================
@@ -58,17 +58,32 @@ class BaseRequest:
         # Formattazione compatta degli attributi
         formatted = []
         for k, v in attrs.items():
-            if isinstance(v, list):  v_str = "[" + ", ".join(map(str, v)) + "]"
-            else:  v_str = repr(v)
+            if isinstance(v, list):
+                v_str = "[" + ", ".join(map(str, v)) + "]"
+            else:
+                v_str = repr(v)
             formatted.append(f"{k}={v_str}")
         return f"{cls_name}({', '.join(formatted)})"
 
     def __post_init__(self):
         """Crea un identificativo univoco per la richiesta."""
         instr = self.instrument
-        instr_id =  getattr(self.instrument, "id") or "GENERAL" if instr else None
+        instr_id = getattr(self.instrument, "id") or "GENERAL" if instr else None
         field_part = ",".join(sorted(self.fields)) if isinstance(self.fields, list) else str(self.fields)
         self.request_id = f"{instr_id}:{field_part}"
+
+    def _get_instr_id(self) -> str:
+        """Helper per ottenere l'ID dello strumento in modo sicuro."""
+        if self.instrument and hasattr(self.instrument, 'id'):
+            return str(self.instrument.id) or "GENERAL"
+        return "GENERAL"
+
+    def __lt__(self, other):
+        """Consente il sorting basato sull'ID dello strumento."""
+        if not isinstance(other, BaseRequest):
+            return NotImplemented
+        return (self._get_instr_id(), self.request_id) < (other._get_instr_id(), other.request_id)
+
 
 # ============================================================
 # STATIC REQUEST (snapshot / semi-static)
@@ -93,7 +108,7 @@ class BaseStaticRequest(BaseRequest):
     def __post_init__(self):
         super().__post_init__()
         # --- Validazioni ---
-        if not self.instrument and self.request_type in ["reference","historical"]:
+        if not self.instrument and self.request_type in ["reference", "historical"]:
             raise ValueError("Missing instrument in BaseStaticRequest")
         if not self.fields:
             raise ValueError("Missing fields in BaseStaticRequest")
@@ -111,7 +126,6 @@ class BaseStaticRequest(BaseRequest):
         if isinstance(self.end, str):
             self.end = dt.datetime.strptime(self.end, "%Y-%m-%d").date()
 
-
     @property
     def isin(self) -> str:
         return getattr(self.instrument, "id", None)
@@ -120,6 +134,7 @@ class BaseStaticRequest(BaseRequest):
         name = getattr(self.instrument, "name", self.isin or "UNKNOWN")
         src = self.source.name if isinstance(self.source, DataSource) else str(self.source)
         return f"<BaseStaticRequest {self.fields} ({name}) [{src}]>"
+
 
 # ============================================================
 # MARKET REQUEST (dinamica / time-series)
@@ -156,7 +171,6 @@ class BaseMarketRequest(BaseRequest):
         if isinstance(self.frequency, str):
             self.frequency = Frequency.from_str(self.frequency)
 
-
         # --- Garantisce dict ---
         self.extra_params = self.extra_params or {}
 
@@ -188,6 +202,7 @@ class BaseMarketRequest(BaseRequest):
             raise TypeError(f"Invalid date string format: {value}")
         raise TypeError(f"Invalid date type: {type(value)}")
 
+
 # ============================================================
 # LOGICAL REQUEST TYPES (provider-agnostic)
 # ============================================================
@@ -197,7 +212,7 @@ class DailyRequest(BaseMarketRequest):
     """Richiesta dati giornalieri (prezzi, NAV, fair value, ecc.)."""
     snapshot_time: Optional[time] = None
     seconds_sampling: Optional[int] = None  # per Timescale
-    adjustment_mode: Optional[str] = None   # per Bloomberg
+    adjustment_mode: Optional[str] = None  # per Bloomberg
     request_type: Optional[RequestType] = 'daily'
 
     def __post_init__(self):

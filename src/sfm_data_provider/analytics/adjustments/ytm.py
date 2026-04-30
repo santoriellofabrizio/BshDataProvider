@@ -63,7 +63,8 @@ class YtmComponent(Component):
             ytm_comp = YtmComponent(ytm_data, target=['BOND_A', 'BOND_B'])
         """
         super().__init__(target)
-        
+
+        if isinstance(ytm, pd.Series): ytm = ytm.to_frame()
         self.ytm_series = ytm.fillna(0.0)
         self.settlement_days = settlement_days
         

@@ -15,6 +15,7 @@ market:
   - SPREAD_PCT
   - SPREAD
   - PX_LAST
+  - FWD_SCALE
 
 info:
   reference:

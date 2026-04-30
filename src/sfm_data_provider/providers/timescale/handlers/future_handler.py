@@ -14,8 +14,7 @@ class FutureHandler(Handler):
     def process(self, requests, query: QueryTimeScale):
         first = requests[0]
         is_daily = "d" in str(first.frequency).lower()
-        market = first.market
-        snapshot_time = first.snapshot_time
+        market = first.market or 'EUREX'
 
         subs = [
             r.subscription(first.start) if callable(r.subscription) else r.subscription
@@ -28,6 +27,7 @@ class FutureHandler(Handler):
         # DAILY: ciclo sulle date, concat, normalize, build_results
         # ------------------------------------------------------------------
         if is_daily:
+            snapshot_time = first.snapshot_time
             days = pd.date_range(first.start, first.end, freq="D")
             rows = []
             for dt in days:

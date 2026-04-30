@@ -243,6 +243,8 @@ class QueryTimeScale:
         end_time: dt.time = dt.time(17, 30),
         segment: Optional[str] = None
     ):
+        if market is None:
+            raise ValueError("market cannot be None")
         date_start = date.strftime("%Y-%m-%d")
         date_end = (date + dt.timedelta(days=1)).strftime("%Y-%m-%d")
         start_ti = start_time.strftime("%H:%M:%S")

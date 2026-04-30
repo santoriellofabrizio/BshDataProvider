@@ -28,6 +28,7 @@ class DividendComponent(Component):
         super().__init__(target)
         self.fx_prices = fx_prices
         self.prices = instrument_prices
+        if isinstance(dividends, pd.Series): dividends = dividends.to_frame()
         self.dividends_raw = dividends.fillna(0.0)
         self._instruments_cache = None
 

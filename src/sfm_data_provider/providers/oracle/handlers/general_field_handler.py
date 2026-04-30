@@ -23,9 +23,10 @@ class ETPIsinsHandler(GeneralHandler):
             request = request[0]
         prm = request.extra_params or {}
         return query.get_etp_isins(
-            segments=prm.get("segments"),
-            underlying=prm.get("underlying"),
-            currency=prm.get("currency"),
+            segments=prm.pop("segments"),
+            underlyings=prm.pop("underlying"),
+            currencies=prm.pop("currency"),
+            **prm
         )
 
     def handle(self, requests: List[BulkRequest], query: QueryOracle):
@@ -37,8 +38,6 @@ class ETPIsinsHandler(GeneralHandler):
             return self.process(requests[0], query)
         else:
             return self._next.handle(requests, query)
-
-
 
 
 class ETFMarketsHandler(GeneralHandler):
