@@ -581,14 +581,16 @@ class QueryOracle:
 
         # Query base senza currency
         query = f"""
-        SELECT BSH_ID, CURRENCY, WEIGHT, WEIGHT_FX_FORWARD, REF_DATE 
-        FROM {table_name} 
-        WHERE BSH_ID IN {placeholders[0]}
-          AND REF_DATE = (
-            SELECT MAX(REF_DATE) FROM {table_name}
+        SELECT BSH_ID, CURRENCY, WEIGHT, WEIGHT_FX_FORWARD, REF_DATE
+        FROM (
+            SELECT BSH_ID, CURRENCY, WEIGHT, WEIGHT_FX_FORWARD, REF_DATE,
+                   RANK() OVER (PARTITION BY BSH_ID ORDER BY REF_DATE DESC) as rnk
+            FROM {table_name}
             WHERE BSH_ID IN {placeholders[0]}
-            AND REF_DATE <= TO_DATE({placeholders[1]}, 'DD-MM-YYYY')
-          )
+              AND REF_DATE <= TO_DATE({placeholders[1]}, 'DD-MM-YYYY')
+              -- Se la currency è fornita, conviene filtrarla già qui per performance
+        ) 
+        WHERE rnk = 1
         """
 
         # Aggiungi filtro currency se fornito
@@ -1012,34 +1014,56 @@ class QueryOracle:
 
     @cache_bsh_data
     def get_etp_isins(
-        self,
-        segments: Optional[List[str]] = None,
-        currency: Optional[str] = None,
-        underlying: Optional[str] = None,
-    ) -> List[str]:
+            self,
+            segments: Optional[List[str]] = None,
+            currencies: Optional[List[str]] = None,  # Rinominato al plurale per chiarezza
+            underlyings: Optional[List[str]] = None,
+            extra_fields: Optional[List] = None# Rinominato al plurale
+    ) -> dict:
+        # Condizioni base sempre presenti
         conditions = ["i.instrument_type = 'ETP'", "ei.status = 'ACTV'"]
         params = {}
-        if segments:
-            placeholders, seg_params = self._in_clause("seg", segments)
-            conditions.append(f"ei.exchange_code IN ({placeholders})")
-            params.update(seg_params)
-        if currency:
-            conditions.append("ei.currency = :currency")
-            params["currency"] = currency
-        if underlying:
-            conditions.append("UPPER(e.underlying_type) = UPPER(:underlying)")
-            params["underlying"] = underlying
+
+        # Helper per aggiungere clausole IN in modo dinamico
+        filters = [
+            ("ei.exchange_code", "seg", segments),
+            ("ei.currency", "curr", currencies),
+            ("UPPER(e.underlying_type)", "und", underlyings)
+        ]
+
+        for column, prefix, values in filters:
+            if values:
+                # Se è una stringa singola, la trasformiamo in lista per uniformità
+                if isinstance(values, str):
+                    values = [values]
+
+                # Sanitizzazione per l'UPPER degli underlying
+                if prefix == "und":
+                    values = [v.upper() for v in values]
+
+                placeholders, sub_params = self._in_clause(prefix, values)
+                conditions.append(f"{column} IN ({placeholders})")
+                params.update(sub_params)
+
         where_clause = " AND ".join(conditions)
 
         query = f"""
-            SELECT DISTINCT i.isin
+            SELECT DISTINCT *
             FROM AF_DATAMART_DBA.INSTRUMENTS i
             JOIN AF_DATAMART_DBA.EXCHANGE_INSTRUMENTS ei ON i.id = ei.instrument_id
             JOIN AF_DATAMART_DBA.ETPS e ON e.instrument_id = i.id
             WHERE {where_clause}
         """
-        data, _ = self.conn.execute_query(query, params)
-        return {"GENERAL": {"etp_isins" : [row[0] for row in data if row[0]]}}
+        data, columns = self.conn.execute_query(query, params)
+        if extra_fields:
+            col_to_idx = {col: i for i, col in enumerate(columns)}
+            isin_idx = col_to_idx['ISIN']
+            out = {row[isin_idx]: {field: row[col_to_idx[field]] for field in extra_fields} for row in data}
+        else:
+            isin_idx = columns.index('ISIN') if 'ISIN' in columns else 0
+            out = [row[isin_idx] for row in data if row[isin_idx]]
+
+        return {"GENERAL": {"etp_isins": out}}
 
     @cache_bsh_data
     def get_etps_data(self) -> list[dict]:

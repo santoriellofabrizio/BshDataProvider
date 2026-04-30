@@ -262,7 +262,7 @@ class RepoComponent(Component):
                 f"mean repo impact: {mean_adj:.6f}"
             )
 
-        return result
+        return - result
 
     def __repr__(self) -> str:
         return (

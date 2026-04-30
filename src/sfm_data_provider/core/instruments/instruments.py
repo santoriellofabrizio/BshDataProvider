@@ -73,7 +73,7 @@ class EtfInstrument(Instrument):
     underlying_type: Optional[str] = None
     payment_policy: Literal["DIST", "ACC"] | None = None
     fund_currency: Optional[CurrencyEnum] = None
-    underlying_index: Optional[Literal["EQUITY", "FIXED INCOME", "COMMODITY", "MONEY MARKET", "SPECIALY"]] = None
+    underlying_index: Optional[Literal["EQUITY", "FIXED INCOME", "COMMODITY", "MONEY MARKET", "SPECIALTY"]] = None
     index_provider: Optional[str] = None
     replication_method: Optional[str] = None
     issuer: Optional[IssuerGroup] = None

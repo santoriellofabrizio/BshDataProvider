@@ -148,26 +148,30 @@ class DataPipeline:
             self._prices = self._fetch_prices()
         return self._prices
 
-
     @property
     def fx_composition(self) -> Optional[pd.DataFrame]:
         if self._fx_composition is None:
-            self._fx_composition = self._override_fx_composition or self._fetch_fx_composition()
+            self._fx_composition = (
+                self._override_fx_composition if self._override_fx_composition is not None
+                else self._fetch_fx_composition()
+            )
         return self._fx_composition
 
     @property
     def fx_forward_composition(self) -> Optional[pd.DataFrame]:
         if self._fx_forward_composition is None:
             self._fx_forward_composition = (
-                self._override_fx_forward_composition or self._fetch_fx_forward_composition()
+                self._override_fx_forward_composition if self._override_fx_forward_composition is not None
+                else self._fetch_fx_forward_composition()
             )
         return self._fx_forward_composition
 
     @property
     def fx_prices(self) -> Optional[pd.DataFrame]:
         if self._fx_prices is None:
-            raw = self._override_fx_prices or self._fetch_fx_prices(
-                self._currencies_from(self.fx_composition)
+            raw = (
+                self._override_fx_prices if self._override_fx_prices is not None
+                else self._fetch_fx_prices(self._currencies_from(self.fx_composition))
             )
             if raw is None:
                 raw = pd.DataFrame(1, columns=['EUR'], index=self.prices.index)
@@ -178,8 +182,9 @@ class DataPipeline:
     @property
     def fx_forward_prices(self) -> Optional[pd.DataFrame]:
         if self._fx_forward_prices is None:
-            raw = self._override_fx_forward_prices or self._fetch_fx_forward_prices(
-                self._currencies_from(self.fx_forward_composition)
+            raw = (
+                self._override_fx_forward_prices if self._override_fx_forward_prices is not None
+                else self._fetch_fx_forward_prices(self._currencies_from(self.fx_forward_composition))
             )
             if isinstance(raw, pd.Series): raw = raw.to_frame()
             self._fx_forward_prices = raw
@@ -188,7 +193,9 @@ class DataPipeline:
     @property
     def ytm(self) -> Optional[pd.DataFrame]:
         if self._ytm is None:
-            raw = self._override_ytm or self._fetch_ytm(
+            raw = (
+                self._override_ytm if self._override_ytm is not None
+                else self._fetch_ytm()
             )
             self._ytm = raw
         return self._ytm
@@ -197,8 +204,9 @@ class DataPipeline:
     def dividends(self) -> Optional[pd.DataFrame]:
         if self._dividends is None:
             ids = [i.id for i in self.instrument_objects if i.type in (InstrumentType.ETP, InstrumentType.STOCK)]
-            self._dividends = self._override_dividends or self.api.info.get_dividends(
-                id=ids, start=self.start, end=self.end
+            self._dividends = (
+                self._override_dividends if self._override_dividends is not None
+                else self.api.info.get_dividends(id=ids, start=self.start, end=self.end)
             )
         return self._dividends
 
@@ -291,7 +299,7 @@ class DataPipeline:
         for type, instruments in self.instruments_by_type.items():
             match type:
                 case InstrumentType.ETP | InstrumentType.FUTURE:
-                    prices.append(self.api.market.get(
+                    mid = self.api.market.get(
                         instruments=instruments,
                         start=self.start,
                         end=self.end,
@@ -301,7 +309,8 @@ class DataPipeline:
                         fields='mid',
                         market="EUREX" if type == InstrumentType.FUTURE else "EURONEXT",
                         source='timescale',
-                    ))
+                    )
+                    prices.append(mid)
                 case InstrumentType.CDXINDEX | InstrumentType.STOCK | InstrumentType.SWAP:
                     raise ValueError("avoid stupid blooomberg downloads!")
                     prices.append(self.api.market.get(
@@ -350,28 +359,42 @@ class DataPipeline:
                                 if getattr(i, 'underlying_type', None) in ["FIXED INCOME", "MONEY MARKET"]]
 
                 if fixed_income:
-                    ytm.append(self.api.info.get_etp_fields(
-                        fields='ytm', instruments=fixed_income, source="timescale",
+                    ytm.append(self.api.info.get_etf_ytm(id=[f.id for f in fixed_income], source="timescale",
                         start=self.start, end=self.end,
                     ))
 
             if typ == InstrumentType.FUTURE:
                 fixed_income = [i for i in instruments
                                 if getattr(i, 'future_underlying', None) in ["FIXED INCOME", "MONEY MARKET"]]
-                ytm.append(self.api.info.get_futures([i.id for i in fixed_income], start=self.start, end=self.end))
-
-        return pd.concat(ytm, axis=1)
+                ytm.append(self.api.info.get_future_ytm(id=[i.id for i in fixed_income], start=self.start, end=self.end))
+        if ytm:
+            return pd.concat(ytm, axis=1)
+        return pd.DataFrame()
 
     def _fetch_fx_prices(self, currencies: List[str]) -> Optional[pd.DataFrame]:
         if not currencies:
             return None
-        return self.api.market.get_daily_currency(
-            id=[f"EUR{ccy}" for ccy in currencies],
-            start=self.start,
-            end=self.end,
-            source=self.fx_source,
-            fallbacks=[{'source': 'bloomberg'}],
-        )
+        if self.frequency.lower() in ("daily", "1d"):
+            return self.api.market.get_daily_currency(
+                id=[f"EUR{ccy}" for ccy in currencies],
+                start=self.start,
+                end=self.end,
+                source=self.fx_source,
+                fallbacks=[{'source': 'bloomberg'}],
+            )
+        else:
+            return self.api.market.get(
+                type=InstrumentType.CURRENCYPAIR,
+                id=[f"EUR{ccy}" for ccy in currencies],
+                start=self.start,
+                end=self.end,
+                start_time=time(9, 30),
+                end_time=time(17, ),
+                frequency=self.frequency,
+                fields='mid',
+                market="EUREX" if type == InstrumentType.FUTURE else "EURONEXT",
+                source='timescale',
+            )
 
     def _fetch_fx_forward_prices(self, currencies: List[str]) -> Optional[pd.DataFrame]:
         if not currencies:

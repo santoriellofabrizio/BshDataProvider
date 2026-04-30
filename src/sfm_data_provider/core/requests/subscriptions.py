@@ -170,7 +170,8 @@ class TimescaleSubscriptionBuilder(BaseSubscriptionBuilder):
                 return sub
             case InstrumentType.FUTURE:
                 sub = inst.timescale_root or inst.id
-                return partial(get_active_timescale_future, sub)
+                rolling = 'third-friday' if inst.future_underlying == "EQUITY" else 'first-friday' #todo improve that rule
+                return partial(get_active_timescale_future, sub, rolling=rolling)
             case InstrumentType.CURRENCYPAIR | InstrumentType.CURRENCYPAIR:
                 if inst.id and len(inst.id) == 3:
                     return f"EUR{inst.id.upper()}"

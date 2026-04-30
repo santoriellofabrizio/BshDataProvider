@@ -300,7 +300,7 @@ class MarketDataAPI(BaseAPI):
         instrument_build_params = {
             k: v for k, v in extra_params.items()
             if k not in ['fields', 'source', 'subscription', 'frequency',
-                         'snapshot_time', 'start', 'end', 'fallbacks', 'request_type']
+                         'snapshot_time', 'start', 'end', 'fallbacks', 'request_type', 'start_time', 'end_time']
         }
 
         instruments = [
@@ -993,7 +993,7 @@ class MarketDataAPI(BaseAPI):
             return raw
 
         factors = {
-            c: (10 ** fwd_scale.get(c, {}).get("FWD_SCALE"))
+            c: (10 ** (fwd_scale.get(c, {}).get("FWD_SCALE") or 4))
             for c in raw.columns
         }
 
